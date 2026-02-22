@@ -1,0 +1,23 @@
+<!DOCTYPE html><html><body style="font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color:#fef2f2; margin:0; padding:20px;">
+<div style="max-width:650px; margin:0 auto; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #fca5a5;">
+    <div style="background-color:#7f1d1d; color:#ffffff; padding:25px; text-align:center;">
+        <h1 style="margin:0; font-size:24px;">⏰ RESERVA EXPIRADA</h1>
+        <p style="margin:5px 0 0 0; font-size:14px;">Processamento em <?= dataGeracao ?></p>
+    </div>
+    <div style="padding:30px;">
+        <div style="background-color:#fff1f2; border-left:4px solid #7f1d1d; padding:15px; margin-bottom:25px;">
+            <p style="margin:5px 0 0 0; font-size:16px; color:#7f1d1d; font-weight:bold;">PRAZO DE VALIDADE ESGOTADO</p>
+            <p style="margin:5px 0 0 0; font-size:13px; color:#ef4444;">O veículo foi liberado automaticamente.</p>
+        </div>
+        <div style="text-align:center; margin-bottom:30px;">
+            <h2 style="margin:15px 0 5px 0; font-size:32px; color:#1e293b;"><?= p.fz ?></h2>
+            <p style="margin:0; font-size:16px;"><?= p.modelo ?> (<?= p.familia ?>)</p>
+        </div>
+        <p style="font-size:13px;"><strong>Vendedor Anterior:</strong> <?= p.responsavel ?> (<?= p.revenda ?>)</p>
+        <p style="font-size:13px;"><strong>Cliente Era:</strong> <?= p.cliente || "N/I" ?> | <strong>Valor Era:</strong> <?= valNegociado ?></p>
+        <div style="margin-top:30px; text-align:center;">
+            <a href="<?= urlApp ?>" style="background-color:#7f1d1d; color:#ffffff; padding:12px 30px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:14px; display:inline-block;">Acessar Sistema</a>
+        </div>
+    </div>
+</div>
+</body></html>

@@ -1,0 +1,1585 @@
+<script>
+  const COLUNAS = [
+    "RESERVA", "PATIO", "FAMILIA", "MODELO", "UP", 
+    "VARIANTE", "ANO/MOD", "FZ", "COR", 
+    "TABELA 26/26", "OPORTUNIDADE", "OBS.:"
+  ];
+  
+  let todosDados = [];
+  let dadosBI_Reservas = []; 
+  let dadosBI_Transf = [];
+  let chartsInst = {};
+  let dashboardTimer = null;
+  let listaVendedoresDados = [];
+
+  window.onload = () => {
+    try {
+      const rawData = window.DADOS_SERVER;
+      if (rawData) {
+        processarDados(rawData);
+        popularFiltros();
+        renderizar();
+      }
+      // --- NOVO BLOCO: Preenche a lista suspensa de vendedores ---
+      listaVendedoresDados = window.LISTA_EMAILS || [];
+      const datalist = document.getElementById('listVendedores');
+      if (datalist && listaVendedoresDados.length > 0) {
+        datalist.innerHTML = listaVendedoresDados.map(v => `<option value="${v.nome}">`).join('');
+      }
+    } catch(e) { console.error("Erro init:", e); }
+    
+    // Autopreenchimento
+    const savedGerente = localStorage.getItem('gerente_email');
+    const savedCoord = localStorage.getItem('coord_email');
+    if(savedGerente && document.getElementById('mEmailCC')) { document.getElementById('mEmailCC').value = savedGerente; }
+    if(savedCoord && document.getElementById('mEmailCoord')) { document.getElementById('mEmailCoord').value = savedCoord; }
+
+    document.getElementById('buscaGlobal').addEventListener('input', renderizar);
+    document.getElementById('filtroPatio').addEventListener('change', renderizar);
+    document.getElementById('filtroStatus').addEventListener('change', renderizar);
+
+    setInterval(() => { 
+        google.script.run.withSuccessHandler(d => { processarDados(d); renderizar(); }).getDadosEstoque(); 
+    }, 60000);
+  };
+
+function processarDados(rawData) {
+    todosDados = rawData.map(r => ({
+      status: r[0], patio: r[1], familia: r[2], modelo: r[3],
+      up: r[4], variante: r[5], ano: r[6], fz: r[7],
+      cor: r[8], tabela: r[9], oportunidade: r[10], obs: r[11], transf: r[12],
+      custo: r[13], dataCompra: r[14], isRenovada: r[15],
+      dataExp: r[16], revendaRes: r[17], vendRes: r[18], tempRes: r[19],
+      balaoObs: r[20] // <--- A MÁGICA DE LER A COLUNA 20
+    }));
+    atualizarKPIs();
+  }
+
+  function renderizar() {
+    const termo = document.getElementById('buscaGlobal').value.toLowerCase();
+    const fPatio = document.getElementById('filtroPatio').value;
+    const fStatus = document.getElementById('filtroStatus').value;
+    
+    const filtrados = todosDados.filter(linha => {
+      const st = linha.status || 'LIVRE';
+      const patio = linha.patio; 
+      if (fPatio && patio !== fPatio) return false;
+      if (fStatus && st !== fStatus) return false;
+      if (termo && !Object.values(linha).some(v => String(v).toLowerCase().includes(termo))) return false;
+      return true;
+    });
+
+    const tb = document.getElementById('tabelaEstoque');
+    let html = `<thead><tr>${COLUNAS.map(c=>`<th>${c}</th>`).join('')}<th>AÇÃO</th></tr></thead><tbody>`;
+    
+    if(!filtrados.length) {
+       html += `<tr><td colspan="100" style="text-align:center;padding:20px">Nada encontrado.</td></tr>`;
+    } else {
+      html += filtrados.map(v => {
+        const isTransf = v.transf === "SOLICITADA";
+        let rowHtml = "";
+        
+        let stText = v.status || 'LIVRE';
+        if (stText === 'RESERVADO' && v.isRenovada) { stText += ' ⏱️'; }
+        
+        // NOVO: Balão (Tooltip) sobre o Status
+        if (stText.includes('RESERVADO') || stText.includes('PENDENTE')) {
+            rowHtml += `<td class="fz-tooltip" onclick="this.classList.toggle('ativo')" onmouseleave="this.classList.remove('ativo')">
+                           <span class="badge ${v.status}" style="cursor:help;">${stText}</span>
+                           <div class="tooltip-box" style="text-align:left; white-space:nowrap; font-weight:normal;">
+                               <strong>Expira:</strong> ${v.dataExp}<br>
+                               <strong>Revenda:</strong> ${v.revendaRes}<br>
+                               <strong>Vendedor:</strong> ${v.vendRes}<br>
+                               <strong>Temp:</strong> ${v.tempRes}
+                           </div>
+                        </td>`;
+        } else {
+            rowHtml += `<td><span class="badge ${v.status||'LIVRE'}">${stText}</span></td>`;
+        }
+        
+        rowHtml += `<td>${v.patio||''}</td>`;
+        rowHtml += `<td>${v.familia||''}</td>`;
+        rowHtml += `<td>${v.modelo||''}</td>`;
+        rowHtml += `<td>${v.up||''}</td>`;
+        rowHtml += `<td>${v.variante||''}</td>`;
+        rowHtml += `<td>${v.ano||''}</td>`;
+
+        let fzIcon = isTransf ? `🚚 ${v.fz}` : v.fz;
+        
+        // NOVO: Puxa o dado mapeado e cria a bolinha
+        let infoExtra = v.balaoObs ? v.balaoObs : "";
+        let htmlBolinha = infoExtra ? `<span class="bolinha-obs"></span>` : "";
+
+        rowHtml += `<td class="fz-tooltip" onclick="this.classList.toggle('ativo')" onmouseleave="this.classList.remove('ativo')">
+                       <span class="fz-link">${fzIcon}</span> ${htmlBolinha}
+                       <div class="tooltip-box" style="text-align:left; font-weight:normal;">
+                           <strong>Custo:</strong> ${v.custo || '-'}<br>
+                           <strong>Data Compra:</strong> ${v.dataCompra || '-'}
+                           ${infoExtra}
+                       </div>
+                    </td>`;
+                    
+        rowHtml += `<td>${v.cor||''}</td>`;
+        rowHtml += `<td style="background-color:#ffedd5;">${v.tabela||''}</td>`;
+        rowHtml += `<td style="background-color:#dcfce7;">${v.oportunidade||''}</td>`;
+        rowHtml += `<td>${v.obs||''}</td>`;
+        
+        let btn = "";
+        let st = v.status;
+        if (isTransf) {
+           btn = `<span style="font-size:10px; color:#f59e0b; font-weight:bold;">🚚 Transf. Solicitada</span>`;
+        } else {
+           btn = (st === 'LIVRE' || st === 'CANCELADO' || st === 'EXPIRADO' || st === '')
+            ? `<button class="btn btn-reserva" style="font-size:10px;padding:4px 8px" onclick="abrirModal('${v.fz}', 'RESERVAR')">RESERVAR</button>` 
+            : `<button class="btn btn-fila" style="font-size:10px;padding:4px 8px" onclick="abrirModal('${v.fz}', 'FILA')">ENTRAR NA FILA</button>`;
+        }
+        rowHtml += `<td>${btn}</td>`;
+        return `<tr>${rowHtml}</tr>`;
+      }).join('');
+    }
+    tb.innerHTML = html + "</tbody>";
+    atualizarKPIs(filtrados);
+  }
+
+function popularFiltros() { 
+      // Corrigido: Agora usa d.patio em vez de d[1]
+      const patios = [...new Set(todosDados.map(d => d.patio).filter(Boolean))].sort(); 
+      document.getElementById('filtroPatio').innerHTML = `<option value="">Todos Pátios</option>` + patios.map(p => `<option>${p}</option>`).join(''); 
+      document.getElementById('filtroStatus').innerHTML = `<option value="">Todos Status</option><option>LIVRE</option><option>PENDENTE</option><option>RESERVADO</option>`;
+}
+  
+function atualizarKPIs(dd) { 
+      const d = dd || todosDados; 
+      let c = { total: d.length, livre: 0, pendente: 0, reservado: 0, accelo: 0, atego: 0, axor: 0, actros: 0, arocs: 0 };
+      
+      d.forEach(linha => {
+          // Corrigido: Agora busca por linha.status e linha.familia
+          const st = String(linha.status || '').toUpperCase();
+          const fam = String(linha.familia || '').toUpperCase();
+          
+          if (st === 'LIVRE' || st === '' || st === 'CANCELADO' || st === 'EXPIRADO') c.livre++;
+          else if (st === 'PENDENTE') c.pendente++;
+          else if (st === 'RESERVADO' || st === 'VENDIDO') c.reservado++;
+          
+          if (fam.includes('ACCELO')) c.accelo++;
+          if (fam.includes('ATEGO')) c.atego++;
+          if (fam.includes('AXOR')) c.axor++;
+          if (fam.includes('ACTROS')) c.actros++;
+          if (fam.includes('AROCS')) c.arocs++;
+      });
+      
+      if(document.getElementById('kTotal')) {
+          document.getElementById('kTotal').innerText = c.total; 
+          document.getElementById('kLivre').innerText = c.livre; 
+          document.getElementById('kPendente').innerText = c.pendente;
+          document.getElementById('kReservado').innerText = c.reservado;
+          document.getElementById('kAccelo').innerText = c.accelo; 
+          document.getElementById('kAtego').innerText = c.atego; 
+          document.getElementById('kAxor').innerText = c.axor; 
+          document.getElementById('kActros').innerText = c.actros; 
+          document.getElementById('kArocs').innerText = c.arocs;
+      }
+}
+
+  // --- FUNÇÕES DE NEGÓCIO ---
+  
+  function buscarDadosVenda() {
+    const fz = document.getElementById('vFz').value;
+    if(!fz) return alert("Digite o FZ!");
+    ['vValorReserva','vPagto','vInst','vVendedor','vRevenda','vClienteNome'].forEach(id => { 
+        if(document.getElementById(id)) { document.getElementById(id).value = "Buscando..."; document.getElementById(id).readOnly = true; }
+    });
+    google.script.run.withSuccessHandler(res => {
+       ['vValorReserva','vPagto','vInst','vVendedor','vRevenda','vClienteNome'].forEach(id => { 
+           if(document.getElementById(id)) document.getElementById(id).value = ""; 
+       });
+       document.getElementById('vValorReserva').readOnly = false;
+       document.getElementById('vPagto').readOnly = false;
+       document.getElementById('vInst').readOnly = false;
+       document.getElementById('vClienteNome').readOnly = false;
+       if(!res.success) { alert(res.message); } else {
+          document.getElementById('vValorReserva').value = res.valor || "";
+          document.getElementById('vPagto').value = res.pagto || "";
+          document.getElementById('vInst').value = res.banco || "";
+          document.getElementById('vVendedor').value = res.vendedor || "";
+          if(document.getElementById('vRevenda')) { document.getElementById('vRevenda').value = res.revenda || ""; }
+          document.getElementById('vClienteNome').value = ""; 
+          document.getElementById('vClienteNome').focus();
+       }
+    }).buscarDadosVeiculoVenda(fz);
+  }
+
+function enviarVenda(formElement) {
+    const btn = document.getElementById('btnSalvarVenda');
+    if(!confirm("Confirmar a venda?")) return;
+    btn.disabled = true; btn.innerText = "Enviando...";
+    
+    google.script.run.withSuccessHandler(res => {
+         alert(res.success ? "💰 " + res.message : "❌ " + res.message);
+         if(res.success) {
+            document.getElementById('modalVenda').style.display = 'none';
+            // Corrigido: Atualização instantânea da tela usando x.fz e item.status
+            const item = todosDados.find(x => x.fz == formElement.vFz.value.trim().toUpperCase());
+            if(item) item.status = 'VENDIDO';
+            renderizar();
+         }
+         btn.disabled = false;
+         btn.innerText = "Confirmar Venda";
+      }).processarVenda(formElement);
+  }
+
+function abrirModal(fz, tipo) { 
+      document.getElementById('mRevenda').value = ""; 
+      document.getElementById('mPedido').value = ""; 
+      document.getElementById('mEmailCC').value = ""; 
+      document.getElementById('mDataFat').value = ""; 
+      document.getElementById('mPagto').value = ""; 
+      document.getElementById('mInst').value = ""; 
+      document.getElementById('mInstOutro').style.display = 'none'; 
+      document.getElementById('mEmailCoord').value = ""; 
+      document.getElementById('mValorNeg').value = ""; 
+      
+      // Limpeza dos Novos Campos
+      document.getElementById('mCliente').value = ""; 
+      document.getElementById('chkCredito').checked = false;
+      document.getElementById('mTemperatura').value = "";
+
+      document.getElementById('chkEntrada').checked = false; 
+      toggleEntrada(); 
+      document.getElementById('chkSeminovo').checked = false; 
+      toggleSeminovo(); 
+      document.getElementById('mDiasPrazo').value = ""; 
+      document.getElementById('divDiasPrazo').style.display='none'; 
+      document.getElementById('mFz').value = fz; 
+      document.getElementById('mFzDisplay').innerText = fz; 
+      document.getElementById('modalTitulo').innerText = tipo === 'FILA' ? "Entrar na Fila" : "Nova Reserva"; 
+      const savedGerente = localStorage.getItem('gerente_email'); 
+      const savedCoord = localStorage.getItem('coord_email'); 
+      if (savedGerente) document.getElementById('mEmailCC').value = savedGerente; 
+      if (savedCoord) document.getElementById('mEmailCoord').value = savedCoord; 
+      document.getElementById('modal').style.display = 'flex'; 
+  }
+
+function salvarReserva() { 
+    const btn = document.getElementById('btnSalvar'); 
+    const selInst = document.getElementById('mInst').value; 
+    const valInst = selInst === 'OUTRO' ? document.getElementById('mInstOutro').value : selInst; 
+    
+    const p = { 
+        fz: document.getElementById('mFz').value, 
+        revenda: document.getElementById('mRevenda').value, 
+        // Novos Campos Capturados
+        cliente: document.getElementById('mCliente').value,
+        credito: document.getElementById('chkCredito').checked,
+        temperatura: document.getElementById('mTemperatura').value,
+        
+        pedido: document.getElementById('mPedido').value, 
+        responsavel: document.getElementById('mResp').value, 
+        email: document.getElementById('mEmail').value, 
+        emailCC: document.getElementById('mEmailCC').value, 
+        emailCoord: document.getElementById('mEmailCoord').value, 
+        dataFat: document.getElementById('mDataFat').value, 
+        pagto: document.getElementById('mPagto').value, 
+        instituicao: valInst, 
+        valorNegociado: document.getElementById('mValorNeg').value, 
+        temEntrada: document.getElementById('chkEntrada').checked, 
+        valorEntrada: document.getElementById('mValorEntrada').value, 
+        temSeminovo: document.getElementById('chkSeminovo').checked, 
+        valorSeminovo: document.getElementById('mValorSeminovo').value, 
+        diasPrazo: document.getElementById('mDiasPrazo').value 
+    }; 
+    
+    if(!p.revenda || !p.pedido || !p.responsavel || !p.email || !p.pagto || !p.instituicao) return alert("Preencha campos obrigatórios!"); 
+    if(p.emailCC) localStorage.setItem('gerente_email', p.emailCC); 
+    if(p.emailCoord) localStorage.setItem('coord_email', p.emailCoord); 
+    
+    btn.disabled=true; 
+    btn.innerText="Aguarde..."; 
+    
+    google.script.run
+        .withSuccessHandler(r => { 
+            alert(r.message); 
+            document.getElementById('modal').style.display='none'; 
+            if(r.success) { renderizar(); } 
+            btn.disabled=false; 
+            btn.innerText="Confirmar"; 
+        })
+        .withFailureHandler(err => {
+            alert("ERRO NO SERVIDOR: " + err.message);
+            btn.disabled=false;
+            btn.innerText="Confirmar";
+        })
+        .solicitarReserva(p); 
+  }
+
+  // FILTRAGEM DA LISTA DE RESERVAS NO BI (CORRIGIDA)
+  function filtrarListaReservas() {
+      const termoBusca = document.getElementById('buscaReservas').value.toLowerCase();
+      
+      if (termoBusca.trim() === '') {
+          // Se não tem busca, mostra todos os dados
+          renderizarTabelaReservas(dadosBI_Reservas);
+      } else {
+          // Filtra por vendedor (índice 7) e revenda (índice 5)
+          const filtrado = dadosBI_Reservas.filter(r => {
+              const vendedor = String(r[7] || '').toLowerCase();
+              const revenda = String(r[5] || '').toLowerCase();
+              return vendedor.includes(termoBusca) || revenda.includes(termoBusca);
+          });
+          renderizarTabelaReservas(filtrado);
+      }
+  }
+
+// --- RENDERIZAR TABELA (Com reordenação de colunas) ---
+  function renderizarTabelaReservas(lista) {
+      const tbRes = document.getElementById('tabelaAnalitica');
+      
+      // 1. Definição Visual dos Cabeçalhos (Modelo na posição 4)
+      const headers = [
+          "Data", "Status", "Expiração", "Avisos", "Modelo", // <--- Modelo aqui
+          "FZ", "Revenda", "Pedido", "Vendedor", "Email", 
+          "Gerente", "Coord", "Prev. Fat", "Pagto", "Inst", 
+          "Valor", "Tem Ent?", "Val Ent", "Prazo", "Tem Semi?", 
+          "Val Semi", "Faturado?", "Dias na Reserva"
+      ];
+
+      // 2. Mapa de Índices: De onde vem o dado original para cada coluna acima?
+      // O 'Modelo' é o índice 22 no banco de dados original.
+      const ordemIndices = [
+          0,  // Data
+          1,  // Status
+          2,  // Expiração
+          3,  // Avisos
+          22, // MODELO (Movido do final para cá)
+          4,  // FZ
+          5,  // Revenda
+          6,  // Pedido
+          7,  // Vendedor
+          8,  // Email
+          9,  // Gerente
+          10, // Coord
+          11, // Prev Fat
+          12, // Pagto
+          13, // Inst
+          14, // Valor
+          15, // Tem Ent?
+          16, // Val Ent
+          17, // Prazo
+          18, // Tem Semi?
+          19, // Val Semi
+          20, // Faturado?
+          21  // Dias na Reserva
+      ];
+      
+      let htmlRes = "<thead><tr>";
+      // Gera os cabeçalhos com suporte (placeholder) para ordenação
+      headers.forEach((h, i) => {
+          htmlRes += `<th onclick="ordenarTabela(${i})">${h}</th>`;
+      });
+      htmlRes += "</tr></thead><tbody>";
+      
+      if(lista.length === 0) {
+          htmlRes += `<tr><td colspan="${headers.length}" style="text-align:center; padding:15px;">Nenhum resultado encontrado.</td></tr>`;
+      } else {
+          lista.forEach(linhaOriginal => { 
+              htmlRes += "<tr>";
+              // Constrói a linha pegando os dados na ordem definida no mapa
+              ordemIndices.forEach(idx => {
+                  htmlRes += `<td>${linhaOriginal[idx] || ''}</td>`;
+              });
+              htmlRes += "</tr>"; 
+          });
+      }
+      
+      htmlRes += "</tbody>";
+      tbRes.innerHTML = htmlRes;
+  }
+
+  // NOVA FUNÇÃO: Ordenação da tabela de reservas
+  let ordemAtual = { coluna: -1, crescente: true };
+  
+  function ordenarTabela(coluna) {
+      // Se clicou na mesma coluna, inverte a ordem
+      if (ordemAtual.coluna === coluna) {
+          ordemAtual.crescente = !ordemAtual.crescente;
+      } else {
+          ordemAtual.coluna = coluna;
+          ordemAtual.crescente = true;
+      }
+      
+      // Obtém os dados atualmente visíveis (com filtro aplicado se houver)
+      const termoBusca = document.getElementById('buscaReservas') ? document.getElementById('buscaReservas').value.toLowerCase() : '';
+      let dadosParaOrdenar;
+      
+      if (termoBusca && termoBusca.trim() !== '') {
+          // Se há filtro, usa dados filtrados
+          dadosParaOrdenar = dadosBI_Reservas.filter(r => {
+              const vendedor = String(r[7] || '').toLowerCase();
+              const revenda = String(r[5] || '').toLowerCase();
+              return vendedor.includes(termoBusca) || revenda.includes(termoBusca);
+          });
+      } else {
+          dadosParaOrdenar = [...dadosBI_Reservas];
+      }
+      
+      // Ordena os dados
+      dadosParaOrdenar.sort((a, b) => {
+          let valorA = String(a[coluna] || '');
+          let valorB = String(b[coluna] || '');
+          
+          // Tenta converter para número se possível
+          const numA = parseFloat(valorA.replace(/[^\d.-]/g, ''));
+          const numB = parseFloat(valorB.replace(/[^\d.-]/g, ''));
+          
+          let resultado;
+          if (!isNaN(numA) && !isNaN(numB)) {
+              resultado = numA - numB;
+          } else {
+              resultado = valorA.localeCompare(valorB, 'pt-BR', { numeric: true });
+          }
+          
+          return ordemAtual.crescente ? resultado : -resultado;
+      });
+      
+      renderizarTabelaReservas(dadosBI_Reservas);
+     
+      
+      // Atualiza indicador visual da ordenação
+      atualizarIndicadorOrdenacao(coluna);
+  }
+  
+  function atualizarIndicadorOrdenacao(colunaAtiva) {
+      // Remove indicadores anteriores
+      document.querySelectorAll('.analitica-table th').forEach((th, index) => {
+          th.style.position = 'relative';
+          const indicador = th.querySelector('.sort-indicator');
+          if (indicador) indicador.remove();
+          
+          if (index === colunaAtiva) {
+              const span = document.createElement('span');
+              span.className = 'sort-indicator';
+              span.style.cssText = 'position:absolute;right:3px;top:50%;transform:translateY(-50%);font-size:12px;';
+              span.textContent = ordemAtual.crescente ? '▲' : '▼';
+              th.appendChild(span);
+              th.style.background = 'rgba(255,255,255,0.2)';
+          } else {
+              th.style.background = '';
+          }
+      });
+  }
+
+// ============================================================================
+// THEME & DARK MODE
+// ============================================================================
+function initTheme() {
+    const saved = localStorage.getItem('app_theme');
+    if (saved === 'dark') { document.body.setAttribute('data-theme', 'dark'); document.getElementById('btnTheme').innerText = "☀️ Claro"; }
+}
+function toggleTheme() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    if (isDark) { document.body.removeAttribute('data-theme'); localStorage.setItem('app_theme', 'light'); document.getElementById('btnTheme').innerText = "🌙 Escuro"; } 
+    else { document.body.setAttribute('data-theme', 'dark'); localStorage.setItem('app_theme', 'dark'); document.getElementById('btnTheme').innerText = "☀️ Claro"; }
+}
+document.addEventListener('DOMContentLoaded', initTheme);
+
+// ============================================================================
+// DASHBOARD EXECUTIVO BI - MOTOR
+// ============================================================================
+let globalBIData = null;
+Chart.defaults.color = '#94a3b8';
+
+function abrirDashboardBI() { 
+    document.getElementById('inputSenhaBI').value = ""; // Limpa campo
+    document.getElementById('modalSenhaBI').style.display = 'flex'; 
+    setTimeout(() => document.getElementById('inputSenhaBI').focus(), 100); // Foca no teclado
+}
+
+function confirmarSenhaBI() {
+    const senha = document.getElementById('inputSenhaBI').value;
+    if(senha !== "1234") {
+        alert("❌ Senha Incorreta!");
+        document.getElementById('inputSenhaBI').value = "";
+        document.getElementById('inputSenhaBI').focus();
+        return;
+    }
+    
+    document.getElementById('modalSenhaBI').style.display = 'none'; // Fecha modal
+    document.getElementById('dashboardBI').style.display = 'flex'; // Abre Painel
+    document.querySelector('.dash-content').setAttribute('data-theme', 'dark'); // Força tema escuro no BI
+    carregarDadosBI(); 
+}
+
+function fecharDashboardBI() { document.getElementById('dashboardBI').style.display = 'none'; }
+function mudarAbaBI(id) { 
+    document.querySelectorAll('.dash-section').forEach(el => el.classList.remove('active')); 
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active')); 
+    document.getElementById(id).classList.add('active'); 
+    event.target.classList.add('active'); 
+}
+
+function toggleMultiSelect(id) {
+    document.querySelectorAll('.multi-select-dropdown').forEach(el => { if(el.id !== id) el.classList.remove('show'); });
+    document.getElementById(id).classList.toggle('show');
+}
+// Fecha os dropdowns ao clicar fora
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.multi-select-container')) {
+        document.querySelectorAll('.multi-select-dropdown').forEach(el => el.classList.remove('show'));
+    }
+});
+
+function getCheckedValues(containerId) {
+    const checkboxes = document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`);
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+function carregarDadosBI() { 
+    document.getElementById('insightEstoque').innerHTML = "⏳ Processando...";
+    google.script.run.withSuccessHandler(json => { 
+        try { globalBIData = JSON.parse(json); popularFiltrosBI(); renderizarBI(); } catch(e) { console.error(e); } 
+    }).getDadosDashboardCompleto(); 
+}
+
+function parseVal(valStr) {
+    if(!valStr) return 0;
+    let s = String(valStr).replace('R$','').replace(/[^\d.,-]/g, '').trim();
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    return parseFloat(s) || 0;
+}
+function parseDataBI(dStr) {
+    if(!dStr) return null;
+    let s = String(dStr).split(' ')[0]; // Remove horas se tiver
+    if(s.includes('/')) {
+        const p = s.split('/');
+        if(p.length < 3) return null;
+        let ano = parseInt(p[2]); if(ano < 100) ano += 2000;
+        return new Date(ano, parseInt(p[1])-1, parseInt(p[0]));
+    } else if (s.includes('-')) {
+        const p = s.split('-');
+        if(p.length < 3) return null;
+        let ano = parseInt(p[0]);
+        if (ano > 1000) return new Date(ano, parseInt(p[1])-1, parseInt(p[2])); // Formato YYYY-MM-DD
+        ano = parseInt(p[2]); if(ano < 100) ano += 2000;
+        return new Date(ano, parseInt(p[1])-1, parseInt(p[0])); // Formato DD-MM-YYYY
+    }
+    return null;
+}
+
+// NOVO: Gráfico Empilhado Segmentado Genérico
+function criarGraficoStackedSegmentado(id, labels, datasetsConfig, axis='x', isCurr=false) {
+    const ctx = document.getElementById(id).getContext('2d');
+    if(chartsInst[id]) chartsInst[id].destroy();
+    
+    const palette = ['#38bdf8', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#64748b'];
+    let idxColor = 0;
+    
+    const formattedDatasets = Object.keys(datasetsConfig).map(segmentKey => {
+        let color = palette[idxColor % palette.length]; idxColor++;
+        return { label: segmentKey, data: labels.map(l => datasetsConfig[segmentKey][l] || 0), backgroundColor: color };
+    });
+
+    chartsInst[id] = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: labels, datasets: formattedDatasets },
+        options: {
+            indexAxis: axis, responsive: true, maintainAspectRatio: false,
+            scales: { x: { stacked: true }, y: { stacked: true } },
+            plugins: { tooltip: { callbacks: { label: function(c) {
+                let v = c.parsed[axis === 'y' ? 'x' : 'y'];
+                return c.dataset.label + ': ' + (isCurr ? formatBRL(v) : v);
+            }}}}
+        }
+    });
+}
+
+function buildCheckboxes(id, options) {
+    document.getElementById(id).innerHTML = options.map(opt => `<label><input type="checkbox" value="${opt}"> ${opt}</label>`).join('');
+}
+
+function popularFiltrosBI() {
+    if(!globalBIData) return;
+    const familias = [...new Set(globalBIData.estoque.map(e => e.familia).filter(Boolean))].sort();
+    const patios = [...new Set(globalBIData.estoque.map(e => e.patio).filter(Boolean))].sort();
+    const modelos = [...new Set(globalBIData.estoque.map(e => e.modelo).filter(Boolean))].sort();
+    
+    buildCheckboxes('ms-familia-estoque', familias); buildCheckboxes('ms-patio-estoque', patios);
+    buildCheckboxes('ms-familia-fin', familias); buildCheckboxes('ms-patio-fin', patios);
+    buildCheckboxes('ms-familia-res', familias); buildCheckboxes('ms-revenda-res', patios);
+
+    document.getElementById('biFiltroExtratoRevenda').innerHTML = `<option value="">Todas Revendas</option>` + patios.map(p => `<option value="${p}">${p}</option>`).join('');
+    document.getElementById('biFiltroExtratoModelo').innerHTML = `<option value="">Todos Modelos</option>` + modelos.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+function renderizarBI() {
+    if(!globalBIData) return;
+    renderAbaEstoque(); 
+    renderAbaFinanceiro(); 
+    renderAbaReservas();
+    filtrarListaReservas(); // Aba Extrato
+    renderAbaTransferencias(); // <-- ESSA É A LINHA NOVA QUE CHAMA AS TRANSFERÊNCIAS
+}
+
+// ============================================================================
+// UTILITÁRIO DE NORMALIZAÇÃO (Ignora acentos e Maiúsculas/Minúsculas)
+// ============================================================================
+function norm(str) {
+    if (!str) return "";
+    return String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+}
+
+// ---------------------------------------------------------
+// RENDER ABA: ESTOQUE FÍSICO
+// ---------------------------------------------------------
+function renderAbaEstoque() {
+    const selFam = getCheckedValues('ms-familia-estoque').map(norm);
+    const selPatio = getCheckedValues('ms-patio-estoque').map(norm);
+    const fSt = document.getElementById('biFiltroStatusEstoque').value;
+    
+    let d = globalBIData.estoque.filter(e => {
+        if(selFam.length > 0 && !selFam.includes(norm(e.familia))) return false;
+        if(selPatio.length > 0 && !selPatio.includes(norm(e.patio))) return false;
+        if(fSt && e.status !== fSt) return false;
+        return true;
+    });
+
+    let kpis = { total: d.length, livre: 0, res: 0, critico: 0 };
+    let mapPatio = {}, mapFam = {}, mapAgingSeg = {};
+    let agLabels = ['0-30', '31-60', '61-90', '>90'];
+    const hoje = new Date();
+
+    d.forEach(e => {
+        if(e.status === 'LIVRE') kpis.livre++; else if(e.status === 'RESERVADO' || e.status === 'PENDENTE') kpis.res++;
+        if(!mapPatio[e.patio]) mapPatio[e.patio] = {livre:0, res:0};
+        mapPatio[e.patio][e.status === 'LIVRE' ? 'livre' : 'res']++;
+        let famNome = e.familia || 'Outros'; mapFam[famNome] = (mapFam[famNome]||0) + 1;
+        
+        let dp = parseDataBI(e.dataCompra);
+        if(dp) {
+            let dias = Math.floor((hoje - dp) / (1000*60*60*24));
+            let faixa = '>90';
+            if(dias <= 30) faixa = '0-30'; else if(dias <= 60) faixa = '31-60'; else if(dias <= 90) faixa = '61-90';
+            if(faixa === '>90') kpis.critico++;
+            if(!mapAgingSeg[famNome]) mapAgingSeg[famNome] = {};
+            mapAgingSeg[famNome][faixa] = (mapAgingSeg[famNome][faixa]||0) + 1;
+        }
+    });
+
+    safeText('biTotalEstoque', kpis.total); safeText('biLivreEstoque', kpis.livre);
+    safeText('biReservadoEstoque', kpis.res); safeText('biCriticoEstoque', kpis.critico);
+
+    let percLivre = kpis.total ? ((kpis.livre/kpis.total)*100).toFixed(0) : 0;
+    let topFam = Object.entries(mapFam).sort((a,b)=>b[1]-a[1])[0];
+    
+    let textIA = `<div class="insight-icon">💡</div><div class="insight-content">`;
+    textIA += `<strong>Visão Física:</strong> Dos <strong>${kpis.total} veículos</strong> filtrados, ${percLivre}% estão livres para negociação imediata no pátio. <br>`;
+    if(kpis.critico > 0) textIA += `⚠️ Atenção aos <strong>${kpis.critico} veículos</strong> críticos (parados há mais de 90 dias) que estão consumindo espaço e capital. <br>`;
+    if(topFam) textIA += `✅ A linha <strong>${topFam[0]}</strong> representa o maior volume físico deste cenário, com ${topFam[1]} unidades.</div>`;
+    document.getElementById('insightEstoque').innerHTML = textIA;
+
+    const lPatio = Object.keys(mapPatio);
+    criarGraficoStacked('cPatioEstoque', lPatio, lPatio.map(p=>mapPatio[p].livre), lPatio.map(p=>mapPatio[p].res));
+    criarGrafico('cFamiliaEstoque', 'doughnut', mapFam, 'Volume', ['#38bdf8', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444']);
+    criarGraficoStackedSegmentado('cAgingEstoque', agLabels, mapAgingSeg);
+}
+
+// =========================================================
+// RENDER ABA: FINANCEIRO E GRÁFICO INTERATIVO (DRILL-DOWN)
+// =========================================================
+let dataGiroDrilldown = { ano: {}, mes: {}, view: 'ano', selectedAno: '' };
+
+function voltarGraficoGiro() {
+    dataGiroDrilldown.view = 'ano';
+    document.getElementById('btnVoltarGiro').style.display = 'none';
+    renderGraficoGiro();
+}
+
+function renderGraficoGiro() {
+    let labels = []; let dataPts = []; let isAno = dataGiroDrilldown.view === 'ano';
+
+    if (isAno) {
+        let anos = Object.keys(dataGiroDrilldown.ano).sort();
+        anos.forEach(a => {
+            labels.push(a);
+            let d = dataGiroDrilldown.ano[a];
+            dataPts.push(d.qtd > 0 ? (d.soma / d.qtd).toFixed(0) : 0);
+        });
+    } else {
+        let ano = dataGiroDrilldown.selectedAno;
+        if (dataGiroDrilldown.mes[ano]) {
+            let meses = Object.keys(dataGiroDrilldown.mes[ano]).sort((a,b) => { let numA = parseInt(a); let numB = parseInt(b); return (!isNaN(numA) && !isNaN(numB)) ? numA - numB : a.localeCompare(b); });
+            meses.forEach(m => {
+                labels.push(`Mês ${m}/${ano}`);
+                let d = dataGiroDrilldown.mes[ano][m];
+                dataPts.push(d.qtd > 0 ? (d.soma / d.qtd).toFixed(0) : 0);
+            });
+        }
+    }
+
+    const ctx = document.getElementById('cGiroEvol').getContext('2d');
+    if(chartsInst['cGiroEvol']) chartsInst['cGiroEvol'].destroy();
+
+    chartsInst['cGiroEvol'] = new Chart(ctx, {
+        type: 'line',
+        data: { labels: labels, datasets: [{ label: 'Giro Médio (Dias)', data: dataPts, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', fill: true, tension: 0.4, pointRadius: 6, pointHoverRadius: 8 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+            onClick: (e, elements) => {
+                if (dataGiroDrilldown.view === 'ano' && elements.length > 0) {
+                    const index = elements[0].index;
+                    dataGiroDrilldown.selectedAno = chartsInst['cGiroEvol'].data.labels[index];
+                    dataGiroDrilldown.view = 'mes';
+                    document.getElementById('btnVoltarGiro').style.display = 'inline-block';
+                    renderGraficoGiro();
+                }
+            }
+        }
+    });
+}
+
+// ---------------------------------------------------------
+// RENDER ABA: FINANCEIRO
+// ---------------------------------------------------------
+function renderAbaFinanceiro() {
+    const selFam = getCheckedValues('ms-familia-fin').map(norm);
+    const selPatio = getCheckedValues('ms-patio-fin').map(norm);
+    
+    // 1. DADOS DE ESTOQUE (Capital Imobilizado Físico)
+    let dE = globalBIData.estoque.filter(e => {
+        if(selFam.length > 0 && !selFam.includes(norm(e.familia))) return false;
+        if(selPatio.length > 0 && !selPatio.includes(norm(e.patio))) return false;
+        return true;
+    });
+
+    let custoTotal = 0; let custoComReserva = 0; 
+    let mapFamFin = {}; let mapAgingSegFin = {}; let agLabels = ['0-30', '31-60', '61-90', '>90']; const hoje = new Date();
+
+    dE.forEach(e => {
+        let val = parseVal(e.custo); 
+        custoTotal += val;
+        
+        // Separa o custo do que já está reservado
+        if (e.status === 'RESERVADO' || e.status === 'PENDENTE') {
+            custoComReserva += val;
+        }
+
+        let famNome = e.familia || 'Outros'; mapFamFin[famNome] = (mapFamFin[famNome]||0) + val;
+        let dp = parseDataBI(e.dataCompra);
+        if(dp) {
+            let dias = Math.floor((hoje - dp) / (1000*60*60*24));
+            let faixa = '>90';
+            if(dias <= 30) faixa = '0-30'; else if(dias <= 60) faixa = '31-60'; else if(dias <= 90) faixa = '61-90';
+            if(!mapAgingSegFin[famNome]) mapAgingSegFin[famNome] = {};
+            mapAgingSegFin[famNome][faixa] = (mapAgingSegFin[famNome][faixa]||0) + val;
+        }
+    });
+
+    // 2. PROJEÇÃO DE CARTEIRA ATIVA
+    let projecao = 0;
+    globalBIData.reservas.forEach(r => {
+        let statusLimpo = String(r[1] || "").trim().toUpperCase();
+        if(statusLimpo === 'RESERVADO' || statusLimpo === 'PENDENTE') {
+            let infoE = globalBIData.estoque.find(x => norm(x.fz) === norm(r[4]));
+            if(infoE && selFam.length > 0 && !selFam.includes(norm(infoE.familia))) return;
+            if(selPatio.length > 0 && !selPatio.includes(norm(r[5]))) return;
+            projecao += parseVal(r[14]);
+        }
+    });
+
+    let famMaisCara = Object.entries(mapFamFin).sort((a,b) => b[1]-a[1])[0];
+
+    safeText('biCustoTotal', formatBRL(custoTotal)); 
+    safeText('biCustoComReserva', formatBRL(custoComReserva));
+    safeText('biProjecaoFat', formatBRL(projecao));
+
+    let textIA = `<div class="insight-icon">📈</div><div class="insight-content">`;
+    textIA += `<strong>Visão Financeira:</strong> O capital imobilizado atual total é de <strong>${formatBRL(custoTotal)}</strong>. Deste montante, <strong>${formatBRL(custoComReserva)}</strong> estão atrelados a veículos que já possuem reserva. <br>`;
+    textIA += `A projeção comercial em vias de fechamento (Valor Negociado) é de <strong>${formatBRL(projecao)}</strong>. <br>`;
+    if(famMaisCara) textIA += `🎯 A linha <strong>${famMaisCara[0]}</strong> representa o maior peso de custo no pátio, somando ${formatBRL(famMaisCara[1])}.`;
+    textIA += `</div>`;
+    document.getElementById('insightFinanceiro').innerHTML = textIA;
+
+    criarGraficoStackedSegmentado('cAgingFin', agLabels, mapAgingSegFin, 'x', true);
+    criarGrafico('cFamiliaFin', 'bar', mapFamFin, 'Imobilizado (R$)', '#38bdf8', 'y', true);
+}
+
+// ---------------------------------------------------------
+// RENDER ABA: RESERVAS (CARTEIRA) E TEMPOS DE VENDA
+// ---------------------------------------------------------
+function renderAbaReservas() {
+    const selRevenda = getCheckedValues('ms-revenda-res').map(norm);
+    const selFam = getCheckedValues('ms-familia-res').map(norm);
+    const fTemp = norm(document.getElementById('biFiltroTermometro').value);
+
+    // Adicionado KPI de Negociações Quentes
+    let kpis = { qtd: 0, valor: 0, creditoAprov: 0, quente: 0 };
+    let mapCrono = {}, mapIdade = {'0-5':0, '6-10':0, '11-15':0, '>15':0}, mapIdadePatio = {'0-30':0, '31-60':0, '61-90':0, '>90':0};
+    let mapFamRes = {}, mapTemp = {};
+    const hoje = new Date();
+
+    let idxV = 21; let idxFam = 30; // Coluna Familia Inserida
+    if (globalBIData.headersReservas) {
+        const hNorm = globalBIData.headersReservas.map(x => String(x).toUpperCase().trim());
+        let iV = hNorm.indexOf("DIAS NA RESERVA"); if(iV > -1) idxV = iV;
+        let iFam = hNorm.indexOf("FAMILIA"); if(iFam > -1) idxFam = iFam;
+    }
+
+    let somaDiasResAtiva = 0; let qtdDiasResAtiva = 0;
+
+    // CARTEIRA ATIVA (Reservado / Pendente)
+    let dR = globalBIData.reservas.filter(r => {
+        let statusLimpo = String(r[1] || "").trim().toUpperCase();
+        if(statusLimpo !== 'RESERVADO' && statusLimpo !== 'PENDENTE') return false;
+        
+        let revenda = norm(r[5]); let temp = norm(r[25]);
+        
+        let fam = norm(r[idxFam]);
+        if (!fam || fam === 'NDA') {
+            let infoE = globalBIData.estoque.find(x => norm(x.fz) === norm(r[4])) || {};
+            fam = norm(infoE.familia);
+        }
+
+        if(fTemp && !temp.includes(fTemp)) return false;
+        if(selRevenda.length > 0 && !selRevenda.includes(revenda)) return false;
+        if(selFam.length > 0 && !selFam.includes(fam)) return false;
+        return true;
+    });
+
+    dR.forEach(r => {
+        let val = parseVal(r[14]); kpis.qtd++; kpis.valor += val;
+        
+        if(String(r[24]) === 'SIM') kpis.creditoAprov++;
+        
+        let tempNormalizada = norm(r[25] || "");
+        if(tempNormalizada.includes('QUENTE')) kpis.quente++;
+
+        let infoE = globalBIData.estoque.find(x => norm(x.fz) === norm(r[4])) || {};
+
+        let valV = String(r[idxV] || "").toUpperCase().trim();
+        if (valV && valV !== 'NDA' && valV !== 'ERRO') {
+            let diasV = parseInt(valV.replace(/[^\d.-]/g, ''));
+            if (!isNaN(diasV) && diasV > 0) { somaDiasResAtiva += diasV; qtdDiasResAtiva++; }
+        }
+
+        let dRes = parseDataBI(r[0]);
+        if(dRes) {
+            let dt = Math.floor((hoje - dRes)/(1000*60*60*24));
+            if(dt<=5) mapIdade['0-5']++; else if(dt<=10) mapIdade['6-10']++; else if(dt<=15) mapIdade['11-15']++; else mapIdade['>15']++;
+        }
+
+        let dCompra = parseDataBI(infoE.dataCompra);
+        if(dCompra) {
+            let dp = Math.floor((hoje - dCompra)/(1000*60*60*24));
+            if(dp<=30) mapIdadePatio['0-30']++; else if(dp<=60) mapIdadePatio['31-60']++; else if(dp<=90) mapIdadePatio['61-90']++; else mapIdadePatio['>90']++;
+        }
+
+        let fam = norm(r[idxFam]);
+        if (!fam || fam === 'NDA') fam = norm(infoE.familia) || 'OUTROS';
+        mapFamRes[fam] = (mapFamRes[fam]||0) + 1;
+
+        let t = r[25] || 'Não Informado'; mapTemp[t] = (mapTemp[t]||0) + 1;
+        let prev = r[11]; if(prev && prev.length > 5) mapCrono[prev] = (mapCrono[prev]||0) + val;
+    });
+
+    let mediaResAtiva = qtdDiasResAtiva > 0 ? (somaDiasResAtiva / qtdDiasResAtiva).toFixed(0) : 0;
+    let percCredito = kpis.qtd > 0 ? ((kpis.creditoAprov/kpis.qtd)*100).toFixed(0) : 0;
+    let percQuente = kpis.qtd > 0 ? ((kpis.quente/kpis.qtd)*100).toFixed(0) : 0;
+
+    safeText('biQtdRes', kpis.qtd); 
+    safeText('biValorRes', formatBRL(kpis.valor));
+    safeText('biTempoMedioRes', mediaResAtiva + " dias"); 
+    safeText('biQtdQuente', `${kpis.quente} (${percQuente}%)`);
+    safeText('biQtdCredito', `${kpis.creditoAprov} (${percCredito}%)`);
+
+    let textIA = `<div class="insight-icon">🤝</div><div class="insight-content">`;
+    textIA += `<strong>Análise de Carteira:</strong> Temos <strong>${kpis.qtd} veículos</strong> em processo de negociação (R$ ${formatBRL(kpis.valor)}), com uma idade média de <strong>${mediaResAtiva} dias</strong> na reserva. <br>`;
+    textIA += `🔥 O funil de vendas está aquecido: <strong>${percQuente}%</strong> das negociações estão marcadas como "Quentes" e <strong>${percCredito}%</strong> já possuem crédito aprovado no banco.`;
+    textIA += `</div>`;
+    document.getElementById('insightReservas').innerHTML = textIA;
+
+    const sortedCrono = Object.keys(mapCrono).sort((a,b)=>{const[d1,m1,y1]=a.split('/');const[d2,m2,y2]=b.split('/');return new Date(y1,m1-1,d1)-new Date(y2,m2-1,d2);}).reduce((o,k)=>{o[k]=mapCrono[k];return o;},{});
+    criarGrafico('cCronograma', 'bar', sortedCrono, 'Previsão R$', '#10b981', 'x', true);
+    criarGrafico('cTempRes', 'doughnut', mapTemp, 'Volume', ['#ef4444', '#f59e0b', '#10b981', '#64748b']);
+    criarGrafico('cIdadeRes', 'bar', mapIdade, 'Qtd Reservas', '#f59e0b', 'x');
+    criarGrafico('cIdadePatioRes', 'bar', mapIdadePatio, 'Qtd Veículos', '#38bdf8', 'x');
+    criarGrafico('cFamiliaRes', 'doughnut', mapFamRes, 'Qtd Reservas', ['#38bdf8', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444']);
+}
+
+// ---------------------------------------------------------
+// RENDER ABA: EXTRATO ANALÍTICO
+// ---------------------------------------------------------
+function filtrarListaReservas() {
+      const tbRes = document.getElementById('tabelaAnalitica');
+      const fRev = norm(document.getElementById('biFiltroExtratoRevenda').value);
+      const fMod = norm(document.getElementById('biFiltroExtratoModelo').value);
+      const termoBusca = norm(document.getElementById('buscaReservas').value);
+      
+      let filtrado = globalBIData.reservas.filter(r => {
+          if(!String(r[1]).includes('RESERVADO') && !String(r[1]).includes('PENDENTE')) return false;
+          if(fRev && norm(r[5]) !== fRev) return false;
+          if(fMod && norm(r[22]) !== fMod) return false;
+          if(termoBusca && !r.some(v => norm(v).includes(termoBusca))) return false;
+          return true;
+      });
+
+      const headers = [ "Data", "Status", "Expiração", "Avisos", "Modelo", "FZ", "Revenda", "Pedido", "Vendedor", "Prev. Fat", "Pagto", "Inst", "Valor", "Tem Ent?", "Val Ent", "Prazo", "Tem Semi?", "Val Semi", "Dias na Reserva" ];
+      const indicesLimpos = [0, 1, 2, 3, 22, 4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21];
+      
+      let htmlRes = "<thead><tr>" + headers.map(h => `<th>${h}</th>`).join('') + "</tr></thead><tbody>";
+      if(filtrado.length === 0) { htmlRes += `<tr><td colspan="${headers.length}" style="text-align:center; padding:15px;">Nada encontrado.</td></tr>`; } 
+      else { filtrado.forEach(linhaOriginal => { htmlRes += "<tr>" + indicesLimpos.map(idx => `<td>${linhaOriginal[idx] || ''}</td>`).join('') + "</tr>"; }); }
+      tbRes.innerHTML = htmlRes + "</tbody>";
+}
+
+  function exportarExcelTransf() { 
+    if(!dadosBI_Transf.length) return alert("Sem dados.");
+    const dadosLimpos = dadosBI_Transf.map(t => { return [t.data, t.fz, t.modelo, t.origem, t.destino, t.solicitante, t.direta]; });
+    dadosLimpos.unshift(["Data", "FZ", "Modelo", "Origem", "Destino", "Solicitante", "Entrega Direta"]);
+    const ws = XLSX.utils.aoa_to_sheet(dadosLimpos);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Transferencias");
+    XLSX.writeFile(wb, "Relatorio_Transferencias.xlsx"); 
+  }
+
+  function safeText(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
+  function formatBRL(v) { return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL', maximumFractionDigits:0}); }
+  function getTop10(obj) { return Object.fromEntries(Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,10)); }
+  function criarGrafico(id, tipo, data, lbl, colors, axis='x', isCurr=false) { const ctx = document.getElementById(id).getContext('2d'); if(chartsInst[id]) chartsInst[id].destroy(); let bgColors = Array.isArray(colors) ? colors : colors; chartsInst[id] = new Chart(ctx, { type:tipo, data:{labels:Object.keys(data), datasets:[{label:lbl, data:Object.values(data), backgroundColor:bgColors, borderRadius:4}]}, options:{indexAxis:axis, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:tipo.includes('pie')||tipo.includes('doughnut'),position:'right'},tooltip:{callbacks:{label:function(c){let l=c.dataset.label||'';if(l)l+=': ';if(c.parsed.y!==null&&isCurr)l+=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(axis==='y'?c.parsed.x:c.parsed.y);else if(isCurr)l+=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(c.parsed);else l+=c.formattedValue;return l;}}}}}}); }
+  function criarGraficoStacked(id, l, d1, d2) { const ctx = document.getElementById(id).getContext('2d'); if(chartsInst[id]) chartsInst[id].destroy(); chartsInst[id] = new Chart(ctx, { type:'bar', data:{labels:l, datasets:[{label:'Livre',data:d1,backgroundColor:'#16a34a'},{label:'Reservado',data:d2,backgroundColor:'#f59e0b'}]}, options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}}}}); }
+  function abrirModalVenda() { document.getElementById('formVenda').reset(); ['vValorReserva','vPagto','vInst','vVendedor','vRevenda','vClienteNome'].forEach(id => { if(document.getElementById(id)) { document.getElementById(id).readOnly = true; document.getElementById(id).value = ""; } }); document.getElementById('modalVenda').style.display = 'flex'; }
+  function abrirModalTransferencia() { ['mtFz','mtDestino','mtOrigem','mtModelo','mtVendReserva','mtNome','mtEmail'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = ""; }); document.getElementById('mtDireto').checked = false; document.getElementById('modalTransf').style.display = 'flex'; }
+  function buscarDadosTransf() { const fz = document.getElementById('mtFz').value; if(!fz) return alert("Digite o FZ"); document.getElementById('mtModelo').value = "Buscando..."; google.script.run.withSuccessHandler(res => { if(!res.success) { alert(res.message); document.getElementById('mtModelo').value = ""; } else { document.getElementById('mtModelo').value = res.modelo; document.getElementById('mtOrigem').value = res.origem; document.getElementById('mtDestino').value = res.destino; document.getElementById('mtVendReserva').value = res.vendedor; } }).withFailureHandler(err => { alert("Erro ao buscar dados."); document.getElementById('mtModelo').value = ""; }).buscarDadosVeiculoTransf(fz); }
+  function enviarTransferencia() { const btn = document.getElementById('btnSalvarTransf'); const p = { fz: document.getElementById('mtFz').value, destino: document.getElementById('mtDestino').value, origem: document.getElementById('mtOrigem').value, modelo: document.getElementById('mtModelo').value, nome: document.getElementById('mtNome').value, email: document.getElementById('mtEmail').value, entregaDireta: document.getElementById('mtDireto').checked }; if(!p.fz || !p.destino || !p.nome || !p.email) return alert("Preencha todos os campos e BUSQUE o veículo antes!"); localStorage.setItem('vendedor_email', p.email); localStorage.setItem('vendedor_nome', p.nome); btn.disabled = true; btn.innerText = "Enviando..."; google.script.run.withSuccessHandler(res => { alert(res.success ? "✅ " + res.message : "❌ " + res.message); if(res.success) { document.getElementById('modalTransf').style.display = 'none'; } btn.disabled = false; btn.innerText = "Solicitar"; }).solicitarTransferencia(p); }
+  function toggleEntrada() { const chk = document.getElementById('chkEntrada'); document.getElementById('divEntrada').style.display = chk.checked ? 'block' : 'none'; if(!chk.checked) document.getElementById('mValorEntrada').value = ""; }
+  function toggleSeminovo() { const chk = document.getElementById('chkSeminovo'); document.getElementById('divSeminovo').style.display = chk.checked ? 'block' : 'none'; if(!chk.checked) document.getElementById('mValorSeminovo').value = ""; }
+  function verificarPagto() { const sel = document.getElementById('mPagto'); const div = document.getElementById('divDiasPrazo'); if(sel.value === 'PARCELADO DE NIGRIS') { div.style.display = 'block'; } else { div.style.display = 'none'; document.getElementById('mDiasPrazo').value = ""; } }
+  function verificarOutro(select) { const inputOutro = document.getElementById('mInstOutro'); if (select.value === 'OUTRO') { inputOutro.style.display = 'block'; inputOutro.focus(); } else { inputOutro.style.display = 'none'; inputOutro.value = ""; } }
+  
+
+// --- LÓGICA DE CANCELAMENTO ---
+
+function abrirModalCancelamento() {
+    document.getElementById('mcFz').value = "";
+    document.getElementById('divDadosCancel').style.display = 'none';
+    document.getElementById('mcSenha').value = "";
+    document.getElementById('mcMotivo').value = "";
+    document.getElementById('modalCancel').style.display = 'flex';
+    document.getElementById('mcFz').focus();
+}
+
+function buscarParaCancelar() {
+    const fz = document.getElementById('mcFz').value;
+    if(!fz) return alert("Digite o FZ!");
+    
+    const btn = event.target;
+    btn.innerText = "Buscando...";
+    btn.disabled = true;
+
+    google.script.run.withSuccessHandler(res => {
+        btn.innerText = "🔍 Buscar";
+        btn.disabled = false;
+        
+        if(!res.success) {
+            alert(res.message);
+            document.getElementById('divDadosCancel').style.display = 'none';
+        } else {
+            // Preenche os dados visualmente
+            document.getElementById('mcModelo').innerText = res.dados.modelo;
+            document.getElementById('mcRevenda').innerText = res.dados.revenda;
+            document.getElementById('mcCliente').innerText = res.dados.cliente || "Não informado";
+            document.getElementById('mcVendedor').innerText = res.dados.vendedor;
+            
+            // Guarda dados ocultos importantes para o envio
+            document.getElementById('mcRevenda').dataset.fullData = JSON.stringify(res.dados);
+            
+            document.getElementById('divDadosCancel').style.display = 'block';
+        }
+    }).buscarDadosReservaAtiva(fz);
+}
+
+function executarCancelamento() {
+    const fz = document.getElementById('mcFz').value;
+    const motivo = document.getElementById('mcMotivo').value;
+    const senha = document.getElementById('mcSenha').value;
+    
+    if(!motivo) return alert("Selecione um motivo!");
+    if(!senha) return alert("A senha de autorização é obrigatória!");
+
+    if(!confirm("Tem certeza que deseja CANCELAR esta reserva? Esta ação é irreversível.")) return;
+
+    // Recupera dados salvos da busca
+    const dadosRaw = document.getElementById('mcRevenda').dataset.fullData;
+    const dados = dadosRaw ? JSON.parse(dadosRaw) : {};
+
+    const payload = {
+        fz: fz,
+        motivo: motivo,
+        senha: senha,
+        revenda: dados.revenda, // Necessário para validar a senha no backend
+        ...dados // Envia o restante dos dados para montar o email
+    };
+
+    const btn = document.getElementById('btnConfirmarCancel');
+    btn.innerText = "Processando...";
+    btn.disabled = true;
+
+    google.script.run.withSuccessHandler(res => {
+        btn.innerText = "CONFIRMAR CANCELAMENTO";
+        btn.disabled = false;
+        
+        if(res.success) {
+            alert("✅ " + res.message);
+            document.getElementById('modalCancel').style.display = 'none';
+            renderizar(); // Atualiza a tela principal
+        } else {
+            alert("❌ " + res.message);
+        }
+    }).processarCancelamentoReserva(payload);
+}
+// --- FUNÇÃO DE AUTOCOMPLETAR EMAILS ---
+  function autoPreencherEmails() {
+      const nomeDigitado = document.getElementById('mResp').value;
+      const vendedor = listaVendedoresDados.find(v => v.nome === nomeDigitado);
+      
+      if (vendedor) {
+          document.getElementById('mEmail').value = vendedor.email;
+          
+          // Preenche Gerente e Coord, se houver na planilha
+          if (vendedor.gerente) {
+              document.getElementById('mEmailCC').value = vendedor.gerente;
+          }
+          if (vendedor.coord) {
+              document.getElementById('mEmailCoord').value = vendedor.coord;
+          }
+      }
+  }
+
+  // ============================================================================
+// LÓGICA DE RENOVAÇÃO DE RESERVAS
+// ============================================================================
+
+const MOTIVOS_RENOVACAO = [
+    "Aguardando Cliente – Crédito Aprovado Aguardando formalização das assinaturas.",
+    "Aguardando Banco - Cota Contemplada aguardando Liberação da Carta de Crédito.",
+    "Aguardando Banco - Crédito em análise.",
+    "Aguardando Banco - Crédito em reanalise devido pendencia."
+];
+
+function abrirModalRenovacao() {
+    document.getElementById('mrFz').value = "";
+    document.getElementById('mrMsgBusca').innerText = "";
+    document.getElementById('mrForm').style.display = 'none';
+    document.getElementById('mrSenha').value = "";
+    document.getElementById('mrInstOutro').style.display = 'none';
+    
+    const selMotivo = document.getElementById('mrMotivo');
+    selMotivo.innerHTML = `<option value="">Selecione o motivo...</option>` + 
+                          MOTIVOS_RENOVACAO.map(m => `<option value="${m}">${m}</option>`).join('');
+    
+    document.getElementById('modalRenovar').style.display = 'flex';
+}
+
+function verificarOutroRenovacao(select) {
+    const inputOutro = document.getElementById('mrInstOutro');
+    if (select.value === 'OUTRO') {
+        inputOutro.style.display = 'block';
+        inputOutro.focus();
+    } else {
+        inputOutro.style.display = 'none';
+        inputOutro.value = "";
+    }
+}
+
+function buscarParaRenovar() {
+    const fz = document.getElementById('mrFz').value.trim();
+    if(!fz) return alert("Digite o FZ!");
+    
+    const msg = document.getElementById('mrMsgBusca');
+    msg.style.color = "#000";
+    msg.innerText = "Buscando histórico...";
+    document.getElementById('mrForm').style.display = 'none';
+
+    google.script.run.withSuccessHandler(res => {
+        if(!res.success) {
+            msg.style.color = "#dc2626";
+            msg.innerText = res.message;
+        } else {
+            msg.innerText = "";
+            document.getElementById('mrModelo').innerText = res.dados.modelo;
+            document.getElementById('mrRevenda').innerText = res.dados.revenda;
+            document.getElementById('mrVendedor').innerText = res.dados.vendedor;
+            
+            // Popula os campos com os dados atuais
+            document.getElementById('mrCliente').value = res.dados.cliente || "";
+            document.getElementById('mrPagto').value = res.dados.pagto || "";
+            document.getElementById('mrValor').value = res.dados.valor || "";
+            document.getElementById('mrTemperatura').value = res.dados.temperatura || "";
+            document.getElementById('mrCredito').checked = res.dados.credito === "SIM";
+            
+            let selectInst = document.getElementById('mrInst');
+            let instOptions = Array.from(selectInst.options).map(o => o.value);
+            if (res.dados.instituicao && instOptions.includes(res.dados.instituicao)) {
+                selectInst.value = res.dados.instituicao;
+                document.getElementById('mrInstOutro').style.display = 'none';
+            } else if (res.dados.instituicao) {
+                selectInst.value = 'OUTRO';
+                document.getElementById('mrInstOutro').value = res.dados.instituicao;
+                document.getElementById('mrInstOutro').style.display = 'block';
+            }
+            
+            document.getElementById('mrRevenda').dataset.fullData = JSON.stringify(res.dados);
+            document.getElementById('mrForm').style.display = 'block';
+        }
+    }).buscarDadosRenovacao(fz);
+}
+
+function executarRenovacao() {
+    const fz = document.getElementById('mrFz').value;
+    const motivo = document.getElementById('mrMotivo').value;
+    const senha = document.getElementById('mrSenha').value;
+    
+    if(!motivo) return alert("Selecione um motivo para a renovação!");
+    if(!senha) return alert("A senha de autorização é obrigatória!");
+
+    const selInst = document.getElementById('mrInst').value;
+    const valInst = selInst === 'OUTRO' ? document.getElementById('mrInstOutro').value : selInst;
+
+    const dadosRaw = document.getElementById('mrRevenda').dataset.fullData;
+    const dadosOriginais = dadosRaw ? JSON.parse(dadosRaw) : {};
+
+    const payload = {
+        fz: fz,
+        motivo: motivo,
+        senha: senha,
+        revenda: dadosOriginais.revenda,
+        novoCliente: document.getElementById('mrCliente').value,
+        novoPagto: document.getElementById('mrPagto').value,
+        novaInst: valInst,
+        novoValor: document.getElementById('mrValor').value,
+        novaTemp: document.getElementById('mrTemperatura').value,
+        novoCredito: document.getElementById('mrCredito').checked ? "SIM" : "NÃO",
+        ...dadosOriginais
+    };
+
+    const btn = document.getElementById('btnConfirmarRenovacao');
+    btn.innerText = "Processando...";
+    btn.disabled = true;
+
+    google.script.run
+        .withSuccessHandler(res => {
+            btn.innerText = "Confirmar e Atualizar";
+            btn.disabled = false;
+            if(res.success) {
+                alert("✅ " + res.message);
+                document.getElementById('modalRenovar').style.display = 'none';
+                
+                // --- CORREÇÃO DA TELA BRANCA (SOFT RELOAD) ---
+                google.script.run.withSuccessHandler(d => {
+                    processarDados(d);
+                    renderizar();
+                }).getDadosEstoque();
+                
+            } else {
+                alert("❌ " + res.message);
+            }
+        })
+        .withFailureHandler(err => {
+            alert("❌ ERRO NO SERVIDOR: " + err.message);
+            btn.innerText = "Confirmar e Atualizar";
+            btn.disabled = false;
+        })
+        .processarRenovacaoReserva(payload);
+}
+
+// ---------------------------------------------------------
+// RENDER ABA: TRANSFERÊNCIAS
+// ---------------------------------------------------------
+function renderAbaTransferencias() {
+    const tbTransf = document.getElementById('tabelaTransferencias');
+    if(!tbTransf) return;
+    
+    let html = "<thead><tr><th>Data</th><th>FZ</th><th>Modelo</th><th>Origem</th><th>Destino</th><th>Solicitante</th><th>Entrega Direta</th></tr></thead><tbody>";
+    
+    if (!globalBIData.transferencias || globalBIData.transferencias.length === 0) {
+        html += `<tr><td colspan="7" style="text-align:center; padding:15px;">Nenhuma transferência solicitada no momento.</td></tr>`;
+    } else {
+        globalBIData.transferencias.forEach(t => { 
+            html += `<tr>
+                <td>${t.data || '-'}</td>
+                <td><strong>${t.fz || '-'}</strong></td>
+                <td>${t.modelo || '-'}</td>
+                <td><span style="color:#ef4444; font-weight:bold;">${t.origem || '-'}</span></td>
+                <td><span style="color:#10b981; font-weight:bold;">${t.destino || '-'}</span></td>
+                <td>${t.solicitante || '-'}</td>
+                <td>${(t.direta && t.direta === 'SIM') ? '✅ SIM' : 'NÃO'}</td>
+            </tr>`; 
+        });
+    }
+    tbTransf.innerHTML = html + "</tbody>";
+}
+
+// ============================================================================
+// UX UPGRADE: FECHAMENTO INTELIGENTE DE MODAIS (ESC e Clique Fora)
+// ============================================================================
+
+// 1. Fechar ao pressionar a tecla ESC
+window.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        const modais = document.querySelectorAll('.modal-overlay');
+        modais.forEach(modal => {
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            }
+        });
+    }
+});
+
+// 2. Fechar ao clicar na área escura (Overlay) fora da caixa branca
+window.addEventListener('click', function(event) {
+    // Verifica se onde o usuário clicou é exatamente o fundo escuro (overlay)
+    if (event.target.classList.contains('modal-overlay')) {
+        event.target.style.display = 'none';
+    }
+});
+
+// ============================================================================
+// MOTOR DE EXPORTAÇÃO EXCEL (XML SPREADSHEET 2003)
+// ============================================================================
+
+// Conversor Genérico de Tabela HTML para XML do Excel
+function tableToExcelXML(tableId, filename) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+
+    let xml = '<?xml version="1.0"?>\n';
+    xml += '<?mso-application progid="Excel.Sheet"?>\n';
+    xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n';
+    xml += '<Worksheet ss:Name="Relatorio">\n<Table>\n';
+
+    for (let i = 0; i < table.rows.length; i++) {
+        xml += '<Row>\n';
+        for (let j = 0; j < table.rows[i].cells.length; j++) {
+            // Escapa caracteres especiais do XML para evitar quebra do arquivo
+            let text = table.rows[i].cells[j].innerText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            xml += `<Cell><Data ss:Type="String">${text}</Data></Cell>\n`;
+        }
+        xml += '</Row>\n';
+    }
+
+    xml += '</Table>\n</Worksheet>\n</Workbook>';
+    gerarDownloadXML(xml, filename);
+}
+
+// ============================================================================
+// MOTOR DE EXPORTAÇÃO EXCEL (PADRÃO OURO - .XLSX NATIVO COM SHEETJS)
+// ============================================================================
+
+// 1. Botão: Aba de Extrato Analítico (Lê direto da Tabela HTML)
+function exportarExcel() { 
+    const tabela = document.getElementById('tabelaAnalitica');
+    if (!tabela) return;
+    const wb = XLSX.utils.table_to_book(tabela, { sheet: "Extrato" });
+    XLSX.writeFile(wb, 'Extrato_Carteira_Reservas.xlsx');
+}
+
+// 2. Botão: Aba de Transferências (Lê direto da Tabela HTML)
+function exportarExcelTransf() { 
+    const tabela = document.getElementById('tabelaTransferencias');
+    if (!tabela) return;
+    const wb = XLSX.utils.table_to_book(tabela, { sheet: "Transferencias" });
+    XLSX.writeFile(wb, 'Relatorio_Transferencias.xlsx');
+}
+
+// 3. Botão: Aba Visão de Estoque (Lê da memória, super rápido e limpo)
+function exportarExcelEstoque() {
+    if (!globalBIData || !globalBIData.estoque) return;
+
+    // Resgata os filtros que o usuário aplicou na tela
+    const selFam = getCheckedValues('ms-familia-estoque').map(norm);
+    const selPatio = getCheckedValues('ms-patio-estoque').map(norm);
+    const fSt = document.getElementById('biFiltroStatusEstoque').value;
+
+    let filtrado = globalBIData.estoque.filter(e => {
+        if(selFam.length > 0 && !selFam.includes(norm(e.familia))) return false;
+        if(selPatio.length > 0 && !selPatio.includes(norm(e.patio))) return false;
+        if(fSt && e.status !== fSt) return false;
+        return true;
+    });
+
+    // Monta a matriz de dados para o Excel
+    let dadosExcel = [
+        ["FZ", "STATUS", "PATIO", "FAMILIA", "MODELO", "COR", "CUSTO", "DATA COMPRA"]
+    ];
+    
+    filtrado.forEach(e => {
+        dadosExcel.push([
+            e.fz || '', 
+            e.status || '', 
+            e.patio || '', 
+            e.familia || '', 
+            e.modelo || '', 
+            e.cor || '', 
+            e.custo || '', 
+            e.dataCompra || ''
+        ]);
+    });
+
+    // Cria a planilha virtual nativa e faz o download
+    const ws = XLSX.utils.aoa_to_sheet(dadosExcel);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Estoque Filtrado");
+    
+    // Baixa o arquivo .xlsx oficial sem nenhum erro no Windows/Mac
+    XLSX.writeFile(wb, 'Visao_Estoque_Filtrado.xlsx');
+}
+
+// ============================================================================
+// MOTOR DE EXPORTAÇÃO PDF EXECUTIVO (BROWSER PRINT NATIVE)
+// ============================================================================
+
+function exportarPDF(tabId, nomeArquivo) {
+    const elemento = document.getElementById(tabId);
+    if (!elemento) return;
+
+    // 1. ISOLAMENTO TOTAL: Avisa o body que estamos a imprimir
+    document.body.classList.add('modo-impressao-ativo');
+
+    // 2. Isola a aba atual
+    const todasAbas = document.querySelectorAll('.dash-section');
+    todasAbas.forEach(aba => aba.classList.remove('aba-imprimir'));
+    elemento.classList.add('aba-imprimir');
+
+    // 3. Cria o Cabeçalho Dinâmico
+    const headerDiv = document.createElement('div');
+    headerDiv.id = 'pdf-header-temp';
+    const tituloRelatorio = String(nomeArquivo).replace(/_/g, ' '); 
+    const dataHora = new Date().toLocaleString('pt-PT');
+    
+    headerDiv.innerHTML = `
+        <div style="border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end;">
+            <div>
+                <h1 style="margin: 0; color: #1e3a8a; font-size: 24px; font-family: sans-serif; text-transform: uppercase; font-weight: 800;">${tituloRelatorio}</h1>
+                <p style="margin: 5px 0 0 0; color: #64748b; font-size: 13px; font-weight: bold;">Extraído do Portal de Gestão a: ${dataHora}</p>
+            </div>
+            <div>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Mercedes-Logo.svg/1024px-Mercedes-Logo.svg.png" style="height: 40px; object-fit: contain;">
+            </div>
+        </div>
+    `;
+    
+    elemento.insertBefore(headerDiv, elemento.firstChild);
+
+    // 4. Força os gráficos a readequarem-se
+    if (typeof Chart !== 'undefined') {
+        Object.values(Chart.instances).forEach(chart => chart.resize());
+    }
+
+    // 5. Chama a impressão nativa
+    setTimeout(() => {
+        window.print();
+        
+        // 6. Limpeza pós-impressão
+        const tempHeader = document.getElementById('pdf-header-temp');
+        if (tempHeader) tempHeader.remove();
+        elemento.classList.remove('aba-imprimir');
+        document.body.classList.remove('modo-impressao-ativo'); // Tira o modo de impressão
+        
+        if (typeof Chart !== 'undefined') {
+            Object.values(Chart.instances).forEach(chart => chart.resize());
+        }
+    }, 500);
+}
+
+// ============================================================================
+// MÓDULO INFOS E METADADOS (BOTÃO AMARELO)
+// ============================================================================
+
+// --- 1. MÁSCARAS INTELIGENTES DE DIGITAÇÃO ---
+function mascaraMoeda(i) {
+    let v = i.value.replace(/\D/g,'');
+    if(v === "") { i.value = ""; return; }
+    v = (v/100).toFixed(2) + '';
+    v = v.replace(".", ",");
+    v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
+    v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
+    i.value = "R$ " + v;
+}
+
+function mascaraPorcentagem(i) {
+    let v = i.value.replace(/\D/g,'');
+    if(v === "") { i.value = ""; return; }
+    v = (v/100).toFixed(2) + '';
+    v = v.replace(".", ",");
+    i.value = v + "%";
+}
+
+// --- 2. COMUNICAÇÃO COM O SERVIDOR ---
+function buscarDadosFzInfos() {
+    const fz = document.getElementById("infoFz").value.trim().toUpperCase();
+    if(!fz) return alert("Digite o FZ!");
+    
+    document.getElementById("btnBuscarInfo").innerText = "⏳";
+    document.getElementById("btnBuscarInfo").disabled = true;
+    
+    google.script.run.withSuccessHandler(function(res) {
+        document.getElementById("btnBuscarInfo").innerText = "Buscar";
+        document.getElementById("btnBuscarInfo").disabled = false;
+        
+        if(!res.success) return alert("Erro: " + res.message);
+        
+        // Exibe os campos
+        document.getElementById("areaFormInfos").style.display = "block";
+        document.getElementById("areaFooterInfos").style.display = "flex";
+        
+        // Se já tinha dados gravados, preenche tudo! Senão, limpa.
+        if (res.dados) {
+            document.getElementById("infoNegReversao").checked = (res.dados.negReversao === "SIM");
+            document.getElementById("infoFundoEstrela").checked = (res.dados.fundoEstrela === "SIM");
+            document.getElementById("infoComissao").value = res.dados.comissao || "";
+            document.getElementById("infoRetirada").value = res.dados.retirada || "";
+            document.getElementById("infoProgramacao").value = res.dados.programacao || "";
+            document.getElementById("infoBonificacao").value = res.dados.bonificacao || "";
+            document.getElementById("infoObs").value = res.dados.observacao || "";
+        } else {
+            // Limpeza de campos para digitação nova
+            document.getElementById("infoNegReversao").checked = false;
+            document.getElementById("infoFundoEstrela").checked = false;
+            document.getElementById("infoComissao").value = "";
+            document.getElementById("infoRetirada").value = "";
+            document.getElementById("infoProgramacao").value = "";
+            document.getElementById("infoBonificacao").value = "";
+            document.getElementById("infoObs").value = "";
+        }
+    }).buscarDadosInfos(fz);
+}
+
+function salvarDadosFzInfos() {
+    const p = {
+        fz: document.getElementById("infoFz").value.trim().toUpperCase(),
+        negReversao: document.getElementById("infoNegReversao").checked,
+        fundoEstrela: document.getElementById("infoFundoEstrela").checked,
+        comissao: document.getElementById("infoComissao").value,
+        retirada: document.getElementById("infoRetirada").value,
+        programacao: document.getElementById("infoProgramacao").value,
+        bonificacao: document.getElementById("infoBonificacao").value,
+        observacao: document.getElementById("infoObs").value
+    };
+    
+    document.getElementById("btnSalvarInfo").innerText = "Gravando...";
+    document.getElementById("btnSalvarInfo").disabled = true;
+    
+    google.script.run.withSuccessHandler(function(res) {
+        document.getElementById("btnSalvarInfo").innerText = "Gravar e Atualizar Histórico";
+        document.getElementById("btnSalvarInfo").disabled = false;
+        
+        if(res.success) {
+            alert(res.message);
+            document.getElementById("modalInfos").style.display = "none";
+            // Opcional: Recarregar a página para atualizar a tabela principal
+            // window.location.reload(); 
+        } else {
+            alert(res.message);
+        }
+    }).salvarDadosInfos(p);
+}
+
+// ==========================================
+// LÓGICA DO MODAL INFOS E METADADOS
+// ==========================================
+function mascaraMoeda(i) {
+    let v = i.value.replace(/\D/g,''); if(v === "") { i.value = ""; return; }
+    v = (v/100).toFixed(2) + ''; v = v.replace(".", ",");
+    v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,"); v = v.replace(/(\d)(\d{3}),/g, "$1.$2,"); i.value = "R$ " + v;
+}
+
+function mascaraPorcentagem(i) {
+    let v = i.value.replace(/\D/g,''); if(v === "") { i.value = ""; return; }
+    v = (v/100).toFixed(2) + ''; v = v.replace(".", ","); i.value = v + "%";
+}
+
+// Limpa tudo sempre que o botão da barra superior for clicado
+function abrirModalInfos() {
+    document.getElementById('infoFz').value = "";
+    document.getElementById('areaFormInfos').style.display = 'none';
+    document.getElementById('btnBuscarInfo').innerText = "Buscar";
+    document.getElementById('btnBuscarInfo').disabled = false;
+    document.getElementById('modalInfos').style.display = 'flex';
+    setTimeout(() => document.getElementById('infoFz').focus(), 100);
+}
+
+function buscarDadosFzInfos() {
+    const fz = document.getElementById("infoFz").value.trim().toUpperCase();
+    if(!fz) return alert("Digite o FZ!");
+    
+    const btnBusca = document.getElementById("btnBuscarInfo");
+    btnBusca.innerText = "⏳ Buscando..."; 
+    btnBusca.disabled = true;
+    
+    google.script.run
+    .withSuccessHandler(function(res) {
+        btnBusca.innerText = "Buscar"; 
+        btnBusca.disabled = false;
+        
+        if(!res.success) return alert(res.message);
+        
+        document.getElementById("areaFormInfos").style.display = "block";
+        if(res.dados) {
+            document.getElementById("infoNegReversao").checked = (res.dados.negReversao === "SIM");
+            document.getElementById("infoFundoEstrela").checked = (res.dados.fundoEstrela === "SIM");
+            document.getElementById("infoComissao").value = res.dados.comissao || ""; 
+            document.getElementById("infoRetirada").value = res.dados.retirada || "";
+            document.getElementById("infoProgramacao").value = res.dados.programacao || ""; 
+            document.getElementById("infoBonificacao").value = res.dados.bonificacao || "";
+            document.getElementById("infoObs").value = res.dados.observacao || "";
+        } else {
+            // Se for um carro novo, limpa os campos para digitar
+            ["infoComissao","infoRetirada","infoProgramacao","infoBonificacao","infoObs"].forEach(id => document.getElementById(id).value = "");
+            document.getElementById("infoNegReversao").checked = false; 
+            document.getElementById("infoFundoEstrela").checked = false;
+        }
+    })
+    .withFailureHandler(function(err) {
+        // Se o servidor Google travar, destrava o botão e avisa o erro real
+        btnBusca.innerText = "Buscar"; 
+        btnBusca.disabled = false;
+        alert("Erro de comunicação com o servidor: " + err.message);
+    })
+    .buscarDadosInfos(fz);
+}
+
+function salvarDadosFzInfos() {
+    const p = {
+        fz: document.getElementById("infoFz").value.trim().toUpperCase(),
+        negReversao: document.getElementById("infoNegReversao").checked, 
+        fundoEstrela: document.getElementById("infoFundoEstrela").checked,
+        comissao: document.getElementById("infoComissao").value, 
+        retirada: document.getElementById("infoRetirada").value,
+        programacao: document.getElementById("infoProgramacao").value, 
+        bonificacao: document.getElementById("infoBonificacao").value,
+        observacao: document.getElementById("infoObs").value
+    };
+    
+    const btnSalvar = document.getElementById("btnSalvarInfo");
+    btnSalvar.innerText = "Gravando..."; 
+    btnSalvar.disabled = true;
+    
+    google.script.run
+    .withSuccessHandler(function(res) {
+        btnSalvar.innerText = "Gravar e Atualizar"; 
+        btnSalvar.disabled = false;
+        
+        if(res.success) {
+            alert(res.message); 
+            document.getElementById("modalInfos").style.display = "none";
+            // Atualiza a tela puxando tudo do Google Sheets novamente
+            google.script.run.withSuccessHandler(d => { processarDados(d); renderizar(); }).getDadosEstoque();
+        } else {
+            alert(res.message);
+        }
+    })
+    .withFailureHandler(function(err) {
+        btnSalvar.innerText = "Gravar e Atualizar"; 
+        btnSalvar.disabled = false;
+        alert("Erro ao tentar gravar: " + err.message);
+    })
+    .salvarDadosInfos(p);
+}

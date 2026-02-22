@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>PORTAL GESTAO DE ESTOQUE</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <?!= include('css'); ?>
+</head>
+<body>
+
+<div class="dashboard">
+    <div class="kpi"><small>Total</small><strong id="kTotal">...</strong></div>
+    <div class="kpi" style="border-color:#166534"><small>Livres</small><strong id="kLivre">...</strong></div>
+    <div class="kpi" style="border-color:#ca8a04"><small>Pendentes</small><strong id="kPendente">...</strong></div>
+    <div class="kpi" style="border-color:#dc2626"><small>Reservados</small><strong id="kReservado">...</strong></div>
+    <div class="kpi" style="border-color:#475569"><small>Accelo</small><strong id="kAccelo">...</strong></div>
+    <div class="kpi" style="border-color:#475569"><small>Atego</small><strong id="kAtego">...</strong></div>
+    <div class="kpi" style="border-color:#475569"><small>Axor</small><strong id="kAxor">...</strong></div>
+    <div class="kpi" style="border-color:#475569"><small>Actros</small><strong id="kActros">...</strong></div>
+    <div class="kpi" style="border-color:#475569"><small>Arocs</small><strong id="kArocs">...</strong></div>
+  </div>
+
+<div class="toolbar">
+    <button class="btn top-btn btn-dash" onclick="abrirDashboardBI()">📊<br>DASHBOARD</button>
+    <button class="btn top-btn btn-transf" onclick="abrirModalTransferencia()">🚚<br>TRANSFERIR VEÍCULO</button>
+    <button class="btn top-btn btn-renovar" onclick="abrirModalRenovacao()">⏱️<br>RENOVAR RESERVA</button>
+    <button class="btn top-btn btn-cancelar" onclick="abrirModalCancelamento()">⛔<br>CANCELAR RESERVA</button>
+    <button class="btn top-btn" style="background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%); color: white; border: none;" onclick="abrirModalInfos()">ℹ️<br>INFOS</button>
+    <button class="btn top-btn btn-venda" onclick="abrirModalVenda()">💰<br>VENDER</button>
+    <button class="btn-dark-mode" onclick="toggleTheme()" id="btnTheme">🌙 Escuro</button>
+    
+    <input type="text" id="buscaGlobal" class="search-box" placeholder="🔎 Buscar...">
+    <select id="filtroPatio"><option value="">Todos os Pátios</option></select>
+    <select id="filtroStatus"><option value="">Todos os Status</option></select>
+  </div>
+
+  <div class="table-wrapper">
+    <div class="table-scroll"><table id="tabelaEstoque"></table></div>
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h3 id="modalTitulo" style="margin:0 0 15px; color:#1e40af">Nova Reserva</h3>
+      <span onclick="document.getElementById('modal').style.display='none'" 
+            style="font-size: 36px; line-height: 0.5; padding: 10px; cursor: pointer; color: #9ca3af; transition: 0.2s; border-radius: 8px;"
+            onmouseover="this.style.backgroundColor='#fee2e2'; this.style.color='#ef4444';"
+            onmouseout="this.style.backgroundColor='transparent'; this.style.color='#9ca3af';"
+            title="Fechar Janela">&times;</span>
+      <div style="background:#f1f5f9; padding:10px; border-radius:4px; margin-bottom:10px; text-align:center;">
+        <small>Veículo FZ</small><br><strong id="mFzDisplay" style="font-size:18px"></strong>
+      </div>
+      <input type="hidden" id="mFz">
+      
+      <label>Revenda</label><select id="mRevenda"><option value="">Selecione...</option><option>CDN RUDGE</option><option>DN LIMÃO</option><option>DN SOROCABA</option><option>DN SJC</option></select>
+      
+      <label>Cliente (Opcional)</label>
+      <input type="text" id="mCliente" placeholder="Nome do cliente...">
+
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <div style="flex:1;">
+           <label>Crédito Aprovado?</label>
+           <div class="chk-group">
+             <input type="checkbox" id="chkCredito">
+             <label for="chkCredito">Sim, aprovado</label>
+           </div>
+        </div>
+        <div style="flex:1;">
+           <label>Termômetro 🌡️</label>
+           <select id="mTemperatura">
+             <option value="">Selecione...</option>
+             <option value="QUENTE">🟢 Quente (Fechamento Certo)</option>
+             <option value="MORNO">🟡 Morno (Em negociação)</option>
+             <option value="FRIO">🔴 Frio (Sondagem)</option>
+           </select>
+        </div>
+      </div>
+      <label>Nº Pedido</label><input type="text" id="mPedido">
+      <label>Data Prev. Faturamento</label><input type="date" id="mDataFat">
+      <label>Valor Negociado (R$)</label><input type="text" id="mValorNeg" placeholder="Ex: 150.000,00">
+      
+      <div class="chk-group"><input type="checkbox" id="chkEntrada" onchange="toggleEntrada()"><label for="chkEntrada">Pagar Entrada?</label></div>
+      <div id="divEntrada" class="hidden-field"><label>Valor Entrada (R$)</label><input type="text" id="mValorEntrada"></div>
+      
+      <div class="chk-group" style="margin-top:5px"><input type="checkbox" id="chkSeminovo" onchange="toggleSeminovo()"><label for="chkSeminovo">Seminovo na troca?</label></div>
+      <div id="divSeminovo" class="hidden-field"><label>Valor Captação Seminovo (R$)</label><input type="text" id="mValorSeminovo"></div>
+      
+      <label>Forma Pagamento</label>
+      <select id="mPagto" onchange="verificarPagto()"><option value="">Selecione...</option><option>A VISTA</option><option>LEASING</option><option>CDC</option><option>CONSORCIO</option><option>BNDES</option><option>PARCELADO DE NIGRIS</option></select>
+      <div id="divDiasPrazo" class="hidden-field"><label>Dias de Prazo</label><input type="text" id="mDiasPrazo"></div>
+      
+      <label>Instituição Financeira</label>
+      <select id="mInst" onchange="verificarOutro(this)">
+        <option value="">Selecione...</option>
+        <optgroup label="--- A VISTA ---">
+          <option>Dinheiro</option>
+          <option>Boleto até 7 dias</option>
+          <option>PIX</option>
+          <option>Cartão de Crédito A Vista</option>
+          <option>Cartão de Crédito Parcelado até 3x</option>
+          <option>Cartão de Crédito Parcelado até 6x</option>
+        </optgroup>
+        <optgroup label="--- BANCOS / FINANCIADORAS ---">
+          <option>Banco Mercedes-Benz</option>
+          <option>Banco do Brasil</option>
+          <option>BNDES</option>
+          <option>Bradesco Financiamentos</option>
+          <option>Itaú Card</option>
+          <option>Santander</option>
+          <option>Banco Safra</option>
+          <option>Banco BV</option>
+          <option>Banco Daycoval</option>
+          <option>Banco PAN</option>
+          <option>Sicoob</option>
+          <option>Sicredi</option>
+          <option>Banco Alfa</option>
+          <option>Banco Sofisa</option>
+        </optgroup>
+        <optgroup label="--- CONSÓRCIOS ---">
+          <option>Consórcio Mercabenco</option>
+          <option>Consórcio Mercedes-Benz</option>
+          <option>Rodobens</option>
+          <option>Embracon</option>
+          <option>Consórcio Maggi</option>
+          <option>Porto Seguro</option>
+          <option>Bradesco Consórcios</option>
+          <option>Itaú Consórcios</option>
+          <option>BB Consórcios</option>
+          <option>Ademicon</option>
+          <option>Mapfre</option>
+          <option>Sicoob Consórcios</option>
+          <option>Canopus</option>
+          <option>Servopa</option>
+          <option>Unifisa</option>
+        </optgroup>
+        <option value="OUTRO">OUTRO (DIGITAR)</option>
+      </select>
+      <input type="text" id="mInstOutro" style="display:none; margin-top:5px;" placeholder="Digite o nome da instituição...">
+      
+      <label>Vendedor</label>
+      <input type="text" id="mResp" list="listVendedores" oninput="autoPreencherEmails()" placeholder="Comece a digitar o nome...">
+      <datalist id="listVendedores"></datalist>
+      <label>E-mail Vendedor</label><input type="email" id="mEmail">
+      <label>E-mail Gerente</label><input type="email" id="mEmailCC">
+      <label>E-mail Coordenador</label><input type="email" id="mEmailCoord">
+      
+      <div class="modal-btns">
+        <button class="btn btn-cancel" onclick="document.getElementById('modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-reserva" id="btnSalvar" onclick="salvarReserva()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+    <div class="modal-overlay" id="modalTransf">
+    <div class="modal" style="border-top: 5px solid #4f46e5;">
+      <h3 style="color:#4f46e5; margin:0 0 15px">🚚 Transferência</h3>
+      <span onclick="document.getElementById('modalTransf').style.display='none'" 
+            style="font-size: 36px; line-height: 0.5; padding: 10px; cursor: pointer; color: #9ca3af; transition: 0.2s; border-radius: 8px;"
+            onmouseover="this.style.backgroundColor='#fee2e2'; this.style.color='#ef4444';"
+            onmouseout="this.style.backgroundColor='transparent'; this.style.color='#9ca3af';"
+            title="Fechar Janela">&times;</span>
+      
+      <div style="display:flex; gap:5px; align-items:flex-end;">
+        <div style="flex-grow:1;">
+           <label>FZ (Veículo)</label>
+           <input type="text" id="mtFz" placeholder="Digite o FZ..." onblur="this.value=this.value.toUpperCase().trim()">
+        </div>
+        <button class="btn" style="background:#4f46e5; height:34px;" onclick="buscarDadosTransf()">🔍</button>
+      </div>
+
+      <div style="background:#f3f4f6; padding:10px; border-radius:4px; margin-top:10px;">
+         <label style="margin-top:0">Modelo</label>
+         <input type="text" id="mtModelo" disabled style="background:#e5e7eb; border:none; font-weight:bold;">
+         <div style="display:flex; gap:10px; margin-top:5px;">
+            <div style="flex:1"><label>Origem</label><input type="text" id="mtOrigem" disabled style="background:#e5e7eb; border:none;"></div>
+            <div style="flex:1"><label>Destino (Reserva)</label><input type="text" id="mtDestino" disabled style="background:#dcfce7; border:1px solid #86efac; color:#166534; font-weight:bold;"></div>
+         </div>
+         <label>Vendedor Reserva</label><input type="text" id="mtVendReserva" disabled style="background:#e5e7eb; border:none;">
+      </div>
+
+      <div class="chk-group" style="margin-top: 15px; border:1px solid #cbd5e1;">
+        <input type="checkbox" id="mtDireto">
+        <label for="mtDireto" style="font-weight:bold; color:#4f46e5;">Entrega no cliente ou implementador?</label>
+      </div>
+
+      <label>Seu Nome</label><input type="text" id="mtNome">
+      <label>Seu E-mail</label><input type="email" id="mtEmail">
+      
+      <div class="modal-btns">
+        <button class="btn btn-cancel" onclick="document.getElementById('modalTransf').style.display='none'">Cancelar</button>
+        <button class="btn btn-transf" id="btnSalvarTransf" onclick="enviarTransferencia()">Solicitar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modalVenda">
+    <div class="modal" style="border-top: 5px solid #10b981; max-width: 600px;">
+      <h3 style="color:#10b981; margin:0 0 15px">💰 Realizar Venda</h3>
+      <span onclick="document.getElementById('modalVenda').style.display='none'" 
+            style="font-size: 36px; line-height: 0.5; padding: 10px; cursor: pointer; color: #9ca3af; transition: 0.2s; border-radius: 8px;"
+            onmouseover="this.style.backgroundColor='#fee2e2'; this.style.color='#ef4444';"
+            onmouseout="this.style.backgroundColor='transparent'; this.style.color='#9ca3af';"
+            title="Fechar Janela">&times;</span>
+      <form id="formVenda" onsubmit="event.preventDefault(); enviarVenda(this);">
+        
+        <div style="display:flex; gap:5px; align-items:flex-end; margin-bottom:15px;">
+          <div style="flex-grow:1;">
+             <label>FZ (Veículo)</label>
+             <input type="text" name="vFz" id="vFz" placeholder="Digite o FZ..." onblur="this.value=this.value.toUpperCase().trim()" required>
+          </div>
+          <button type="button" class="btn" style="background:#10b981; height:34px;" onclick="buscarDadosVenda()">🔍 Buscar</button>
+        </div>
+
+        <label style="color:#10b981; font-weight:bold; border-bottom:1px solid #eee;">Dados da Reserva</label>
+        
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><label>Valor (R$)</label><input type="text" name="vValorReserva" id="vValorReserva" required></div>
+           <div style="flex:1"><label>Forma Pagto</label><input type="text" name="vPagto" id="vPagto" required></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><label>Instituição</label><input type="text" name="vInst" id="vInst" required></div>
+           <div style="flex:1"><label>Vendedor</label><input type="text" name="vVendedor" id="vVendedor" readonly style="background:#f3f4f6;"></div>
+        </div>
+        
+        <label>Revenda de Origem</label>
+        <input type="text" name="vRevenda" id="vRevenda" readonly style="background:#f3f4f6; margin-bottom:15px;">
+
+        <label style="color:#0f172a; font-weight:bold; margin-top:15px; border-bottom:1px solid #eee;">Dados do Cliente</label>
+        
+        <label>Nome do Cliente</label>
+        <input type="text" name="vClienteNome" id="vClienteNome" required placeholder="Digite o nome do cliente final...">
+        
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><label>CNPJ/CPF</label><input type="text" name="vCnpj" id="vCnpj" required></div>
+           <div style="flex:1"><label>Celular</label><input type="text" name="vCelular" required></div>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><label>E-mail</label><input type="email" name="vEmail" required></div>
+           <div style="flex:1"><label>E-mail Fiscal</label><input type="email" name="vEmailFiscal" required></div>
+        </div>
+
+        <label style="margin-top:10px;">Agente Financeiro</label>
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><input type="text" name="vAgenteNome" placeholder="Nome"></div>
+           <div style="flex:1"><input type="email" name="vAgenteEmail" placeholder="E-mail"></div>
+        </div>
+
+        <label style="margin-top:15px; font-weight:bold; color:#0f172a;">📂 Documentos</label>
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><label>Pedido Compra *</label><input type="file" name="vFilePedido" accept=".pdf,.jpg,.png" required></div>
+           <div style="flex:1"><label>NF Fábrica *</label><input type="file" name="vFileNF" accept=".pdf,.jpg,.png" required></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><label>Aut. Faturamento</label><input type="file" name="vFileAuth" accept=".pdf,.jpg,.png"></div>
+           <div style="flex:1"><label>Cartão CNPJ</label><input type="file" name="vFileDoc" accept=".pdf,.jpg,.png"></div>
+        </div>
+
+        <div class="modal-btns">
+          <button type="button" class="btn btn-cancel" onclick="document.getElementById('modalVenda').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn" style="background:#10b981; color:#fff;" id="btnSalvarVenda">Confirmar Venda</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<div class="modal-overlay" id="modalRenovar">
+  <div class="modal" style="border-top: 5px solid #d97706;">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">
+      <h3 style="margin: 0; color: #b45309;">⏱️ Renovar Reserva</h3>
+      <span onclick="document.getElementById('modalRenovar').style.display='none'" 
+            style="font-size: 36px; line-height: 0.5; padding: 10px; cursor: pointer; color: #9ca3af; transition: 0.2s; border-radius: 8px;"
+            onmouseover="this.style.backgroundColor='#fef08a'; this.style.color='#b45309';"
+            onmouseout="this.style.backgroundColor='transparent'; this.style.color='#9ca3af';"
+            title="Fechar Janela">&times;</span>
+    </div>
+    
+    <div style="display:flex; gap:10px; align-items:flex-end;">
+       <div style="flex:1;">
+         <label>Digite o FZ para renovar</label>
+         <input type="text" id="mrFz" placeholder="Ex: FZ12345" style="text-transform:uppercase;">
+       </div>
+       <button class="btn" style="background:#d97706; color:white;" onclick="buscarParaRenovar()">🔍 Buscar</button>
+    </div>
+    <div id="mrMsgBusca" style="margin-top:10px; font-size:12px; font-weight:bold;"></div>
+
+    <div id="mrForm" style="display:none; margin-top:20px; border-top:1px solid #e2e8f0; padding-top:15px;">
+        <div style="background:#fefce8; border: 1px solid #fef08a; padding:10px; border-radius:4px; margin-bottom:15px; font-size:13px;">
+            <p style="margin:3px 0"><strong>Modelo:</strong> <span id="mrModelo">...</span></p>
+            <p style="margin:3px 0"><strong>Revenda:</strong> <span id="mrRevenda">...</span></p>
+            <p style="margin:3px 0"><strong>Vendedor:</strong> <span id="mrVendedor">...</span></p>
+        </div>
+
+        <label style="color:#b45309;">Motivo da Renovação *</label>
+        <select id="mrMotivo"></select> 
+
+        <label style="margin-top:15px; font-weight:bold; border-bottom:1px solid #e2e8f0; padding-bottom:5px;">Atualização de Dados (Opcional)</label>
+        
+        <label>Nome do Cliente (Opcional)</label>
+        <input type="text" id="mrCliente" placeholder="Atualizar nome do cliente...">
+
+        <div style="display:flex; gap:10px; margin-top:10px;">
+           <div style="flex:1">
+             <label>Forma de Pagamento</label>
+             <select id="mrPagto">
+               <option value="A VISTA">A VISTA</option><option value="FINANCIAMENTO">FINANCIAMENTO</option><option value="CONSÓRCIO">CONSÓRCIO</option><option value="LEASING">LEASING</option><option value="CDC">CDC</option><option value="BNDES">BNDES</option><option value="PARCELADO DE NIGRIS">PARCELADO DE NIGRIS</option>
+             </select>
+           </div>
+           <div style="flex:1">
+             <label>Valor (R$)</label>
+             <input type="text" id="mrValor">
+           </div>
+        </div>
+
+        <label style="margin-top:10px;">Instituição Financeira</label>
+        <select id="mrInst" onchange="verificarOutroRenovacao(this)">
+          <option value="">Selecione...</option>
+          <optgroup label="--- A VISTA ---"><option>Dinheiro</option><option>Boleto até 7 dias</option><option>PIX</option><option>Cartão de Crédito A Vista</option><option>Cartão de Crédito Parcelado até 3x</option><option>Cartão de Crédito Parcelado até 6x</option></optgroup>
+          <optgroup label="--- BANCOS / FINANCIADORAS ---"><option>Banco Mercedes-Benz</option><option>Banco do Brasil</option><option>BNDES</option><option>Bradesco Financiamentos</option><option>Itaú Card</option><option>Santander</option><option>Banco Safra</option><option>Banco BV</option><option>Banco Daycoval</option><option>Banco PAN</option><option>Sicoob</option><option>Sicredi</option><option>Banco Alfa</option><option>Banco Sofisa</option></optgroup>
+          <optgroup label="--- CONSÓRCIOS ---"><option>Consórcio Mercabenco</option><option>Consórcio Mercedes-Benz</option><option>Rodobens</option><option>Embracon</option><option>Consórcio Maggi</option><option>Porto Seguro</option><option>Bradesco Consórcios</option><option>Itaú Consórcios</option><option>BB Consórcios</option><option>Ademicon</option><option>Mapfre</option><option>Sicoob Consórcios</option><option>Canopus</option><option>Servopa</option><option>Unifisa</option></optgroup>
+          <option value="OUTRO">OUTRO (DIGITAR)</option>
+        </select>
+        <input type="text" id="mrInstOutro" style="display:none; margin-top:5px;" placeholder="Digite o nome da instituição...">
+
+        <div style="display:flex; gap:10px; margin-top:10px;">
+           <div style="flex:1">
+             <label>Termômetro 🌡️</label>
+             <select id="mrTemperatura">
+               <option value="QUENTE">🟢 Quente</option><option value="MORNO">🟡 Morno</option><option value="FRIO">🔴 Frio</option>
+             </select>
+           </div>
+           <div style="flex:1; align-self: flex-end; margin-bottom: 5px;">
+             <div class="chk-group">
+               <input type="checkbox" id="mrCredito">
+               <label for="mrCredito">Crédito Aprovado?</label>
+             </div>
+           </div>
+        </div>
+
+        <label style="margin-top:15px; color:#b91c1c;">Senha de Autorização (Gerente) *</label>
+        <input type="password" id="mrSenha" placeholder="Senha da revenda original...">
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="document.getElementById('modalRenovar').style.display='none'">Cancelar</button>
+          <button class="btn" style="background:#d97706; color:white;" id="btnConfirmarRenovacao" onclick="executarRenovacao()">Confirmar e Atualizar</button>
+        </div>
+    </div>
+  </div>
+</div>
+
+<div class="dash-overlay" id="dashboardBI">
+    <div class="dash-header">
+      <div style="display:flex; align-items:center; gap:15px;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        <h3 style="margin:0;">Cockpit Executivo</h3>
+      </div>
+      <button class="btn-close-dash" onclick="fecharDashboardBI()"><span>✖</span> Fechar</button>
+    </div>
+    
+    <div class="dash-tabs">
+      <button class="tab-btn active" onclick="mudarAbaBI('tab-estoque')">📦 Visão de Estoque</button>
+      <button class="tab-btn" onclick="mudarAbaBI('tab-financeiro')">💰 Visão Financeira</button>
+      <button class="tab-btn" onclick="mudarAbaBI('tab-reservas')">🤝 Carteira de Reservas</button>
+      <button class="tab-btn" onclick="mudarAbaBI('tab-analitica')">📋 Extrato de Reservas</button>
+      <button class="tab-btn" onclick="mudarAbaBI('tab-transf')">🚚 Transferências</button>
+    </div>
+
+    <div class="dash-content">
+      
+      <div id="tab-estoque" class="dash-section active">
+        
+        <div class="bi-control-bar">
+          <button class="btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border:none; padding: 6px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);" onclick="exportarExcelEstoque()">📥 Extrair Excel</button>
+          <button class="btn" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; border:none; padding: 6px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-left: 5px;" onclick="exportarPDF('tab-estoque', 'Relatorio_Visao_Estoque')">📄 Baixar PDF</button>
+            
+            
+            <span style="color:#94a3b8; font-weight:bold; font-size:12px; margin-left:10px;">FILTROS:</span>
+            <div class="multi-select-container">
+                <button class="multi-select-btn" onclick="toggleMultiSelect('ms-familia-estoque')">Famílias <span>▼</span></button>
+                <div id="ms-familia-estoque" class="multi-select-dropdown" onchange="renderizarBI()"></div>
+            </div>
+            <div class="multi-select-container">
+                <button class="multi-select-btn" onclick="toggleMultiSelect('ms-patio-estoque')">Pátios (Revenda) <span>▼</span></button>
+                <div id="ms-patio-estoque" class="multi-select-dropdown" onchange="renderizarBI()"></div>
+            </div>
+            <select id="biFiltroStatusEstoque" onchange="renderizarBI()">
+                <option value="">Todos os Status</option>
+                <option value="LIVRE">Apenas Livres</option>
+                <option value="RESERVADO">Apenas Reservados</option>
+            </select>
+        </div>
+
+        <div class="insight-box" id="insightEstoque">Aguardando dados...</div>
+        <div class="kpi-grid">
+           <div class="kpi-card" style="border-left-color:#38bdf8"><div class="kpi-title">Total Físico (Qtd)</div><div class="kpi-value" id="biTotalEstoque">0</div></div>
+           <div class="kpi-card" style="border-left-color:#10b981"><div class="kpi-title">Disponível para Venda</div><div class="kpi-value" id="biLivreEstoque">0</div></div>
+           <div class="kpi-card" style="border-left-color:#f59e0b"><div class="kpi-title">Veículos Reservados</div><div class="kpi-value" id="biReservadoEstoque">0</div></div>
+           <div class="kpi-card" style="border-left-color:#ef4444"><div class="kpi-title">Estoque Crítico (>90d)</div><div class="kpi-value" id="biCriticoEstoque">0</div></div>
+        </div>
+        <div class="charts-grid-estoque">
+          <div class="chart-box wide"><div class="chart-title">Distribuição por Revenda (Pátio)</div><div class="chart-container"><canvas id="cPatioEstoque"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Mix de Produto (Família)</div><div class="chart-container"><canvas id="cFamiliaEstoque"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Tempo de Pátio (Segmentado)</div><div class="chart-container"><canvas id="cAgingEstoque"></canvas></div></div>
+        </div>
+      </div>
+      
+<div id="tab-financeiro" class="dash-section">
+        <div class="bi-control-bar">
+            <button class="btn" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; border:none; padding: 6px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-right: 15px;" onclick="exportarPDF('tab-financeiro', 'Relatorio_Financeiro')">📄 Baixar PDF</button>
+            <span style="color:#94a3b8; font-weight:bold; font-size:12px;">FILTROS:</span>
+            <div class="multi-select-container">
+                <button class="multi-select-btn" onclick="toggleMultiSelect('ms-familia-fin')">Famílias <span>▼</span></button>
+                <div id="ms-familia-fin" class="multi-select-dropdown" onchange="renderizarBI()"></div>
+            </div>
+            <div class="multi-select-container">
+                <button class="multi-select-btn" onclick="toggleMultiSelect('ms-patio-fin')">Pátios (Revenda) <span>▼</span></button>
+                <div id="ms-patio-fin" class="multi-select-dropdown" onchange="renderizarBI()"></div>
+            </div>
+        </div>
+        <div class="insight-box" id="insightFinanceiro">Aguardando dados...</div>
+        
+        <div class="kpi-grid">
+           <div class="kpi-card" style="border-left-color:#38bdf8"><div class="kpi-title">Capital Imobilizado (Custo) TOTAL</div><div class="kpi-value" id="biCustoTotal">R$ 0</div></div>
+           <div class="kpi-card" style="border-left-color:#10b981"><div class="kpi-title">Capital Imobilizado (Custo) com RESERVA</div><div class="kpi-value" id="biCustoComReserva">R$ 0</div></div>
+           <div class="kpi-card" style="border-left-color:#8b5cf6"><div class="kpi-title">Projeção (Carteira Ativa)</div><div class="kpi-value" id="biProjecaoFat">R$ 0</div></div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="chart-box wide"><div class="chart-title">Tempo de Pátio / Capital Travado (R$)</div><div class="chart-container"><canvas id="cAgingFin"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Capital por Família</div><div class="chart-container"><canvas id="cFamiliaFin"></canvas></div></div>
+        </div>
+      </div>
+
+<div id="tab-reservas" class="dash-section">
+         <div class="bi-control-bar">
+          <button class="btn" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; border:none; padding: 6px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-right: 15px;" onclick="exportarPDF('tab-reservas', 'Relatorio_Carteira_Reservas')">📄 Baixar PDF</button>
+            <span style="color:#94a3b8; font-weight:bold; font-size:12px;">FILTROS:</span>
+            <div class="multi-select-container">
+                <button class="multi-select-btn" onclick="toggleMultiSelect('ms-revenda-res')">Revendas <span>▼</span></button>
+                <div id="ms-revenda-res" class="multi-select-dropdown" onchange="renderizarBI()"></div>
+            </div>
+            <div class="multi-select-container">
+                <button class="multi-select-btn" onclick="toggleMultiSelect('ms-familia-res')">Famílias <span>▼</span></button>
+                <div id="ms-familia-res" class="multi-select-dropdown" onchange="renderizarBI()"></div>
+            </div>
+            <select id="biFiltroTermometro" onchange="renderizarBI()"><option value="">Todos os Status (🌡️)</option><option value="QUENTE">Quente</option><option value="MORNO">Morno</option><option value="FRIO">Frio</option></select>
+        </div>
+        <div class="insight-box" id="insightReservas">Aguardando dados...</div>
+        
+        <div class="kpi-grid">
+           <div class="kpi-card" style="border-left-color:#38bdf8"><div class="kpi-title">Qtd Reservas Ativas</div><div class="kpi-value" id="biQtdRes">0</div></div>
+           <div class="kpi-card" style="border-left-color:#10b981"><div class="kpi-title">Valor em Carteira</div><div class="kpi-value" id="biValorRes">R$ 0</div></div>
+           <div class="kpi-card" style="border-left-color:#8b5cf6"><div class="kpi-title">Idade Média (Reservas)</div><div class="kpi-value" id="biTempoMedioRes">0 dias</div></div>
+           <div class="kpi-card" style="border-left-color:#ef4444"><div class="kpi-title">Negociações Quentes 🔥</div><div class="kpi-value" id="biQtdQuente">0 (0%)</div></div>
+           <div class="kpi-card" style="border-left-color:#f59e0b"><div class="kpi-title">Crédito Aprovado ✅</div><div class="kpi-value" id="biQtdCredito">0 (0%)</div></div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="chart-box wide"><div class="chart-title">Cronograma de Faturamento Previsto</div><div class="chart-container"><canvas id="cCronograma"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Reservas por Termômetro 🌡️</div><div class="chart-container"><canvas id="cTempRes"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Tempo na Reserva (Dias)</div><div class="chart-container"><canvas id="cIdadeRes"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Tempo Físico no Pátio (Dias)</div><div class="chart-container"><canvas id="cIdadePatioRes"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Reservas por Família</div><div class="chart-container"><canvas id="cFamiliaRes"></canvas></div></div>
+        </div>
+      </div>
+
+      <div id="tab-analitica" class="dash-section">
+        <div class="bi-control-bar">
+          <button class="btn" style="background-color: #10b981; color: white;" onclick="exportarExcel()">📥 Extrair Excel</button>
+          <select id="biFiltroExtratoRevenda" onchange="filtrarListaReservas()"><option value="">Todas Revendas</option></select>
+          <select id="biFiltroExtratoModelo" onchange="filtrarListaReservas()"><option value="">Todos Modelos</option></select>
+          <input type="text" id="buscaReservas" placeholder="🔎 Buscar (Vendedor, FZ, Pedido)..." onkeyup="filtrarListaReservas()" style="flex:1;">
+        </div>
+        <div class="analitica-container"><table class="analitica-table" id="tabelaAnalitica"></table></div>
+      </div>
+      
+      <div id="tab-transf" class="dash-section">
+        <button class="btn" style="background-color: #10b981; color: white; margin-bottom: 15px;" onclick="exportarExcelTransf()">📥 Extrair Excel</button>
+        <div class="analitica-container"><table class="analitica-table" id="tabelaTransferencias"><thead><tr><th>Data</th><th>FZ</th><th>Modelo</th><th>Origem</th><th>Destino</th><th>Solicitante</th><th>Entrega Direta</th></tr></thead><tbody></tbody></table></div>
+      </div>
+
+    </div>
+  </div>
+
+<div class="modal-overlay" id="modalCancel">
+  <div class="modal">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #fee2e2; padding-bottom: 10px; margin-bottom: 15px;">
+      <h3 id="modalTituloCancel" style="margin: 0;">⛔ Cancelar Reserva</h3>
+      <span onclick="document.getElementById('modalCancel').style.display='none'" 
+            style="font-size: 36px; line-height: 0.5; padding: 10px; cursor: pointer; color: #9ca3af; transition: 0.2s; border-radius: 8px;"
+            onmouseover="this.style.backgroundColor='#fee2e2'; this.style.color='#ef4444';"
+            onmouseout="this.style.backgroundColor='transparent'; this.style.color='#9ca3af';"
+            title="Fechar Janela">&times;</span>
+    </div>
+    
+    <div style="display:flex; gap:10px; align-items:flex-end;">
+       <div style="flex:1;">
+         <label>Digite o FZ para cancelar</label>
+         <input type="text" id="mcFz" placeholder="Ex: FZ12345" style="text-transform:uppercase;">
+       </div>
+       <button class="btn" onclick="buscarParaCancelar()">🔍 Buscar</button>
+    </div>
+
+    <div id="divDadosCancel" style="display:none; margin-top:20px; background:#fff1f2; padding:15px; border:1px solid #fda4af; border-radius:6px;">
+        <p><strong>Veículo:</strong> <span id="mcModelo">...</span></p>
+        <p><strong>Revenda Atual:</strong> <span id="mcRevenda">...</span></p>
+        <p><strong>Cliente:</strong> <span id="mcCliente">...</span></p>
+        <p><strong>Vendedor:</strong> <span id="mcVendedor">...</span></p>
+        
+        <hr style="border:0; border-top:1px solid #fda4af; margin:10px 0;">
+
+        <label>Motivo do Cancelamento</label>
+        <select id="mcMotivo">
+            <option value="">Selecione o motivo...</option>
+            <option>1️⃣ Preço não competitivo</option>
+            <option>2️⃣ Crédito / financiamento reprovado</option>
+            <option>3️⃣ Desistência ou adiamento do cliente</option>
+            <option>4️⃣ Cliente fechou com concorrente</option>
+            <option>5️⃣ Prazo de entrega inadequado</option>
+            <option>6️⃣ Alteração de especificação / modelo</option>
+            <option>7️⃣ Falha de qualificação da venda</option>
+            <option>8️⃣ Falha operacional interna</option>
+        </select>
+
+        <label style="margin-top:10px; color:#b91c1c; font-weight:bold;">Senha de Autorização (Gerente)</label>
+        <input type="password" id="mcSenha" placeholder="Digite a senha da revenda...">
+
+        <div class="modal-footer">
+          <button class="btn" style="background:#ef4444;" id="btnConfirmarCancel" onclick="executarCancelamento()">CONFIRMAR CANCELAMENTO</button>
+        </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalSenhaBI">
+  <div class="modal" style="max-width: 400px; text-align: center; border-top: 5px solid #1e40af;">
+    <span onclick="document.getElementById('modalSenhaBI').style.display='none'" class="close-x">&times;</span>
+    <h3 style="color: #1e40af; margin-bottom: 10px; font-size: 22px;">🔒 Acesso Restrito</h3>
+    <p style="font-size: 14px; color: #64748b; margin-bottom: 25px;">Digite a senha executiva para acessar o Cockpit.</p>
+    
+    <input type="password" id="inputSenhaBI" placeholder="••••" style="text-align: center; font-size: 24px; letter-spacing: 8px; margin-bottom: 20px; font-weight: bold; background: #f8fafc;" onkeyup="if(event.key === 'Enter') confirmarSenhaBI()">
+    
+    <div class="modal-btns" style="justify-content: center; margin-top: 10px;">
+       <button class="btn btn-cancel" onclick="document.getElementById('modalSenhaBI').style.display='none'">Cancelar</button>
+       <button class="btn" style="background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%); color:white;" onclick="confirmarSenhaBI()">Acessar Painel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalInfos">
+  <div class="modal" style="max-width: 500px; border-top: 5px solid #eab308;">
+    <h3 style="color: #ca8a04; margin-top:0;">ℹ️ Inserir Informações Adicionais</h3>
+    <span onclick="document.getElementById('modalInfos').style.display='none'" style="font-size:36px; padding:10px; cursor:pointer; color:#9ca3af; float:right; margin-top:-40px;">&times;</span>
+    
+    <div style="display:flex; gap:10px; margin-bottom:15px;">
+        <input type="text" id="infoFz" placeholder="Digite o FZ..." style="flex:1; text-transform:uppercase;">
+        <button class="btn" id="btnBuscarInfo" style="background:#1e293b; color:white;" onclick="buscarDadosFzInfos()">Buscar</button>
+    </div>
+    
+    <div id="areaFormInfos" style="display:none;">
+        <label>Observação (Aparece na tabela principal)</label>
+        <textarea id="infoObs" rows="3" style="width:100%; border-radius:6px; padding:10px; border:1px solid #cbd5e1;"></textarea>
+        
+        <div class="chk-group" style="margin: 15px 0;"><input type="checkbox" id="infoNegReversao"><label for="infoNegReversao">NEG REVERSÃO</label></div>
+        <div class="chk-group" style="margin: 15px 0;"><input type="checkbox" id="infoFundoEstrela"><label for="infoFundoEstrela">TEM FUNDO ESTRELA</label></div>
+        
+        <div style="display:flex; gap:10px;">
+           <div style="flex:1"><label>Comissão (%)</label><input type="text" id="infoComissao" oninput="mascaraPorcentagem(this)"></div>
+           <div style="flex:1"><label>Retirada (%)</label><input type="text" id="infoRetirada" oninput="mascaraPorcentagem(this)"></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+           <div style="flex:1"><label>Programação (%)</label><input type="text" id="infoProgramacao" oninput="mascaraPorcentagem(this)"></div>
+           <div style="flex:1"><label>Bonificação (R$)</label><input type="text" id="infoBonificacao" oninput="mascaraMoeda(this)"></div>
+        </div>
+        
+        <div class="modal-btns">
+            <button class="btn btn-cancel" onclick="document.getElementById('modalInfos').style.display='none'">Cancelar</button>
+            <button class="btn" id="btnSalvarInfo" style="background:#10b981; color:white;" onclick="salvarDadosFzInfos()">Gravar e Atualizar</button>
+        </div>
+    </div>
+  </div>
+</div>
+
+  <script>
+    window.DADOS_SERVER = <?!= dadosIniciais || "null" ?>;
+    window.LISTA_EMAILS = <?!= listaEmails || "[]" ?>; // <--- NOVA LINHA AQUI
+  </script>
+  <?!= include('js'); ?>
+
+</body>
+</html>

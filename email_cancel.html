@@ -1,0 +1,23 @@
+<!DOCTYPE html><html><body style="font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color:#fef2f2; margin:0; padding:20px;">
+<div style="max-width:650px; margin:0 auto; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #fecaca;">
+    <div style="background-color:#dc2626; color:#ffffff; padding:25px; text-align:center;">
+        <h1 style="margin:0; font-size:24px;">⛔ RESERVA CANCELADA</h1>
+        <p style="margin:5px 0 0 0; font-size:14px;">Cancelado em <?= dataGeracao ?></p>
+    </div>
+    <div style="padding:30px;">
+        <div style="background-color:#fff1f2; border-left:4px solid #dc2626; padding:15px; margin-bottom:25px;">
+            <p style="margin:0; font-size:12px; font-weight:bold;">MOTIVO</p>
+            <p style="margin:5px 0 0 0; font-size:16px; color:#7f1d1d; font-weight:bold;"><?= p.motivo ?></p>
+        </div>
+        <div style="text-align:center; margin-bottom:30px;">
+            <h2 style="margin:15px 0 5px 0; font-size:32px; color:#1e293b;"><?= p.fz ?></h2>
+            <p style="margin:0; font-size:16px;"><?= p.modelo ?> (<?= p.familia ?>)</p>
+        </div>
+        <p style="font-size:13px;"><strong>Reserva Anterior:</strong> <?= p.revenda ?> - <?= p.vendedor ?></p>
+        <p style="font-size:13px;"><strong>Cliente Era:</strong> <?= p.cliente || "N/I" ?> | <strong>Valor:</strong> <?= valNegociado ?></p>
+        <div style="margin-top:20px; text-align:center;">
+            <a href="<?= urlApp ?>" style="background-color:#dc2626; color:#ffffff; padding:12px 30px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:14px; display:inline-block;">Acessar Sistema</a>
+        </div>
+    </div>
+</div>
+</body></html>
