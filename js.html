@@ -1389,99 +1389,6 @@ function exportarPDF(tabId, nomeArquivo) {
     }, 500);
 }
 
-// ============================================================================
-// MÓDULO INFOS E METADADOS (BOTÃO AMARELO)
-// ============================================================================
-
-// --- 1. MÁSCARAS INTELIGENTES DE DIGITAÇÃO ---
-function mascaraMoeda(i) {
-    let v = i.value.replace(/\D/g,'');
-    if(v === "") { i.value = ""; return; }
-    v = (v/100).toFixed(2) + '';
-    v = v.replace(".", ",");
-    v = v.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
-    v = v.replace(/(\d)(\d{3}),/g, "$1.$2,");
-    i.value = "R$ " + v;
-}
-
-function mascaraPorcentagem(i) {
-    let v = i.value.replace(/\D/g,'');
-    if(v === "") { i.value = ""; return; }
-    v = (v/100).toFixed(2) + '';
-    v = v.replace(".", ",");
-    i.value = v + "%";
-}
-
-// --- 2. COMUNICAÇÃO COM O SERVIDOR ---
-function buscarDadosFzInfos() {
-    const fz = document.getElementById("infoFz").value.trim().toUpperCase();
-    if(!fz) return alert("Digite o FZ!");
-    
-    document.getElementById("btnBuscarInfo").innerText = "⏳";
-    document.getElementById("btnBuscarInfo").disabled = true;
-    
-    google.script.run.withSuccessHandler(function(res) {
-        document.getElementById("btnBuscarInfo").innerText = "Buscar";
-        document.getElementById("btnBuscarInfo").disabled = false;
-        
-        if(!res.success) return alert("Erro: " + res.message);
-        
-        // Exibe os campos
-        document.getElementById("areaFormInfos").style.display = "block";
-        document.getElementById("areaFooterInfos").style.display = "flex";
-        
-        // Se já tinha dados gravados, preenche tudo! Senão, limpa.
-        if (res.dados) {
-            document.getElementById("infoNegReversao").checked = (res.dados.negReversao === "SIM");
-            document.getElementById("infoFundoEstrela").checked = (res.dados.fundoEstrela === "SIM");
-            document.getElementById("infoComissao").value = res.dados.comissao || "";
-            document.getElementById("infoRetirada").value = res.dados.retirada || "";
-            document.getElementById("infoProgramacao").value = res.dados.programacao || "";
-            document.getElementById("infoBonificacao").value = res.dados.bonificacao || "";
-            document.getElementById("infoObs").value = res.dados.observacao || "";
-        } else {
-            // Limpeza de campos para digitação nova
-            document.getElementById("infoNegReversao").checked = false;
-            document.getElementById("infoFundoEstrela").checked = false;
-            document.getElementById("infoComissao").value = "";
-            document.getElementById("infoRetirada").value = "";
-            document.getElementById("infoProgramacao").value = "";
-            document.getElementById("infoBonificacao").value = "";
-            document.getElementById("infoObs").value = "";
-        }
-    }).buscarDadosInfos(fz);
-}
-
-function salvarDadosFzInfos() {
-    const p = {
-        fz: document.getElementById("infoFz").value.trim().toUpperCase(),
-        negReversao: document.getElementById("infoNegReversao").checked,
-        fundoEstrela: document.getElementById("infoFundoEstrela").checked,
-        comissao: document.getElementById("infoComissao").value,
-        retirada: document.getElementById("infoRetirada").value,
-        programacao: document.getElementById("infoProgramacao").value,
-        bonificacao: document.getElementById("infoBonificacao").value,
-        observacao: document.getElementById("infoObs").value
-    };
-    
-    document.getElementById("btnSalvarInfo").innerText = "Gravando...";
-    document.getElementById("btnSalvarInfo").disabled = true;
-    
-    google.script.run.withSuccessHandler(function(res) {
-        document.getElementById("btnSalvarInfo").innerText = "Gravar e Atualizar Histórico";
-        document.getElementById("btnSalvarInfo").disabled = false;
-        
-        if(res.success) {
-            alert(res.message);
-            document.getElementById("modalInfos").style.display = "none";
-            // Opcional: Recarregar a página para atualizar a tabela principal
-            // window.location.reload(); 
-        } else {
-            alert(res.message);
-        }
-    }).salvarDadosInfos(p);
-}
-
 // ==========================================
 // LÓGICA DO MODAL INFOS E METADADOS
 // ==========================================
@@ -1496,7 +1403,6 @@ function mascaraPorcentagem(i) {
     v = (v/100).toFixed(2) + ''; v = v.replace(".", ","); i.value = v + "%";
 }
 
-// Limpa tudo sempre que o botão da barra superior for clicado
 function abrirModalInfos() {
     document.getElementById('infoFz').value = "";
     document.getElementById('areaFormInfos').style.display = 'none';
@@ -1531,14 +1437,12 @@ function buscarDadosFzInfos() {
             document.getElementById("infoBonificacao").value = res.dados.bonificacao || "";
             document.getElementById("infoObs").value = res.dados.observacao || "";
         } else {
-            // Se for um carro novo, limpa os campos para digitar
             ["infoComissao","infoRetirada","infoProgramacao","infoBonificacao","infoObs"].forEach(id => document.getElementById(id).value = "");
             document.getElementById("infoNegReversao").checked = false; 
             document.getElementById("infoFundoEstrela").checked = false;
         }
     })
     .withFailureHandler(function(err) {
-        // Se o servidor Google travar, destrava o botão e avisa o erro real
         btnBusca.innerText = "Buscar"; 
         btnBusca.disabled = false;
         alert("Erro de comunicação com o servidor: " + err.message);
@@ -1570,7 +1474,6 @@ function salvarDadosFzInfos() {
         if(res.success) {
             alert(res.message); 
             document.getElementById("modalInfos").style.display = "none";
-            // Atualiza a tela puxando tudo do Google Sheets novamente
             google.script.run.withSuccessHandler(d => { processarDados(d); renderizar(); }).getDadosEstoque();
         } else {
             alert(res.message);
@@ -1583,3 +1486,4 @@ function salvarDadosFzInfos() {
     })
     .salvarDadosInfos(p);
 }
+</script>

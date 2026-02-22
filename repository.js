@@ -280,7 +280,6 @@ function getMapaObservacoes_(ss) {
   if (!sh) return map;
   
   const dados = sh.getDataRange().getDisplayValues();
-  // Lê de cima para baixo. Se houver FZ duplicado, a última linha lida (a mais recente) é a que fica no mapa.
   for (let i = 1; i < dados.length; i++) {
     const fz = String(dados[i][0]).trim().toUpperCase();
     if (fz) {

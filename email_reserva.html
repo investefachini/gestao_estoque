@@ -1,58 +1,108 @@
-<!DOCTYPE html><html><body style="font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color:#f1f5f9; margin:0; padding:20px;">
-<div style="max-width:650px; margin:0 auto; background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-    <div style="background-color:<?= corPrincipal ?>; color:#ffffff; padding:25px; text-align:center;">
-        <h1 style="margin:0; font-size:24px; letter-spacing:1px;"><?= icone ?> <?= tituloBox ?></h1>
-        <p style="margin:5px 0 0 0; opacity:0.9; font-size:14px;">Protocolo gerado em <?= dataGeracao ?></p>
-    </div>
-    <div style="padding:30px;">
-        <div style="text-align:center; margin-bottom:30px; border-bottom:1px solid #e2e8f0; padding-bottom:20px;">
-            <span style="background-color:#f8fafc; color:#64748b; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:bold;">VEÍCULO SELECIONADO</span>
-            <h2 style="margin:15px 0 5px 0; font-size:32px; color:#1e293b;"><?= p.fz ?></h2>
-            <p style="margin:0; font-size:16px; color:#475569; font-weight:500;"><?= p.modelo ?></p>
-            <p style="margin:5px 0 0 0; font-size:14px; color:#64748b;"><?= p.familia ?> • <?= p.cor ?></p>
-        </div>
-        <table style="width:100%; border-collapse:collapse; margin-bottom:10px;">
-            <tr>
-                <td width="50%" style="vertical-align:top; padding-right:10px;">
-                    <h3 style="font-size:14px; color:<?= corPrincipal ?>; border-bottom:2px solid <?= corPrincipal ?>; padding-bottom:5px; margin-bottom:10px;">🚗 Produto</h3>
-                    <p style="margin:5px 0; font-size:13px;"><strong>UP:</strong> <?= p.up ?></p>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Variante:</strong> <?= p.variante ?></p>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Ano:</strong> <?= p.ano ?></p>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Obs:</strong> <?= p.obs ?></p>
-                </td>
-                <td width="50%" style="vertical-align:top; padding-left:10px;">
-                    <h3 style="font-size:14px; color:<?= corPrincipal ?>; border-bottom:2px solid <?= corPrincipal ?>; padding-bottom:5px; margin-bottom:10px;">💼 Negociação</h3>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Cliente:</strong> <?= p.cliente || "-" ?></p>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Valor:</strong> <?= valNegociado ?></p>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Pagto:</strong> <?= p.pagto ?></p>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Crédito:</strong> <?= p.credito ? "SIM" : "NÃO" ?></p>
-                    <p style="margin:5px 0; font-size:13px;"><strong>Termômetro:</strong> <?= p.temperatura || "-" ?></p>
-                </td>
-            </tr>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden;">
+          
+          <tr>
+            <td align="center" style="background-color: #1e293b; padding: 35px 20px;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600; letter-spacing: -0.5px;"><?= icone ?> <?= tituloBox ?></h1>
+              <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 13px;">Gerado pelo Portal de Gestão em <?= dataGeracao ?></p>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding: 40px 30px 20px 30px;">
+              <span style="background-color: #dcfce7; color: #166534; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">Veículo Reservado</span>
+              <h2 style="margin: 20px 0 5px 0; font-size: 42px; color: #0f172a; font-weight: 800; letter-spacing: -1px;"><?= p.fz ?></h2>
+              <p style="margin: 0; font-size: 18px; color: #475569; font-weight: 500;"><?= p.modelo ?></p>
+              <p style="margin: 5px 0 0 0; font-size: 14px; color: #94a3b8;"><?= p.familia ?> &nbsp;|&nbsp; <?= p.cor ?></p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 20px 30px;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td width="48%" valign="top" style="background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <h3 style="margin: 0 0 15px 0; font-size: 13px; color: #1e40af; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">📦 Sobre o Produto</h3>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #334155;"><strong>UP:</strong> <?= p.up ?></p>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #334155;"><strong>Variante:</strong> <?= p.variante ?></p>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #334155;"><strong>Ano:</strong> <?= p.ano ?></p>
+                    <p style="margin: 0; font-size: 13px; color: #334155;"><strong>Obs:</strong> <?= p.obs || "-" ?></p>
+                  </td>
+                  
+                  <td width="4%"></td> <td width="48%" valign="top" style="background-color: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <h3 style="margin: 0 0 15px 0; font-size: 13px; color: #1e40af; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">💼 Negociação</h3>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #334155;"><strong>Valor:</strong> <span style="color:#059669; font-weight:bold;"><?= valNegociado ?></span></p>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #334155;"><strong>Pagto:</strong> <?= p.pagto ?></p>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #334155;"><strong>Crédito:</strong> <?= p.credito ? "Aprovado ✅" : "Pendente ⏳" ?></p>
+                    <p style="margin: 0; font-size: 13px; color: #334155;"><strong>Cliente:</strong> <?= p.cliente || "Não informado" ?></p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="border-top: 1px dashed #cbd5e1; border-bottom: 1px dashed #cbd5e1; padding: 15px 0;">
+                <tr>
+                  <td style="font-size: 13px; color: #475569; line-height: 1.8;">
+                    <strong>🏦 Instituição Financeira:</strong> <?= p.instituicao ?><br>
+                    <strong>💰 Entrada no Negócio:</strong> <?= txtEntrada ?><br>
+                    <strong>🔄 Veículo Seminovo:</strong> <?= txtSeminovo ?>
+                    <? if (p.diasPrazo) { ?><br><strong>📅 Prazo De Nigris:</strong> <?= p.diasPrazo ?> dias<? } ?>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 0 30px 30px 30px;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; border-radius: 8px; padding: 20px;">
+                <tr>
+                  <td width="50%" valign="top">
+                    <p style="margin: 0; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold;">👤 Vendedor Solicitante</p>
+                    <p style="margin: 4px 0 0 0; font-size: 15px; color: #0f172a; font-weight: 600;"><?= p.responsavel ?></p>
+                  </td>
+                  <td width="50%" valign="top">
+                    <p style="margin: 0; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold;">🏢 Revenda / Pedido</p>
+                    <p style="margin: 4px 0 0 0; font-size: 15px; color: #0f172a; font-weight: 600;"><?= p.revenda ?> <span style="color:#94a3b8; font-weight:normal;">(#<?= p.pedido ?>)</span></p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding: 0 30px 40px 30px;">
+              <div style="margin-bottom: 25px;">
+                <?!= avisoHtml ?>
+              </div>
+              <a href="<?= urlApp ?>" style="display: inline-block; background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: bold; font-size: 14px; letter-spacing: 0.5px; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);">Acessar Portal de Estoque</a>
+            </td>
+          </tr>
         </table>
-        <table style="width:100%; border-collapse:collapse; margin-top:20px; background-color:#f8fafc; border-radius:6px; padding:10px;">
-            <tr>
-                <td style="padding:15px; border-right:1px solid #e2e8f0;">
-                    <span style="display:block; font-size:11px; color:#94a3b8;">VENDEDOR</span>
-                    <span style="display:block; font-size:14px; color:#0f172a; font-weight:bold;"><?= p.responsavel ?></span>
-                </td>
-                <td style="padding:15px;">
-                    <span style="display:block; font-size:11px; color:#94a3b8;">PEDIDO E REVENDA</span>
-                    <span style="display:block; font-size:13px;"><strong><?= p.revenda ?></strong> (Nº <?= p.pedido ?>)</span>
-                </td>
-            </tr>
+        
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px;">
+          <tr>
+            <td align="center" style="padding: 20px 0; color: #94a3b8; font-size: 12px;">
+              Este é um e-mail automático do sistema. Por favor, não responda.
+            </td>
+          </tr>
         </table>
-        <div style="margin-top:20px; padding:15px; border:1px solid #e2e8f0; border-radius:6px;">
-            <p style="margin:0 0 5px 0; font-size:12px; font-weight:bold;">PAGAMENTO:</p>
-            <p style="margin:3px 0; font-size:13px;">🏦 Instituição: <?= p.instituicao ?></p>
-            <p style="margin:3px 0; font-size:13px;">💰 Entrada: <?= txtEntrada ?></p>
-            <p style="margin:3px 0; font-size:13px;">🔄 Seminovo: <?= txtSeminovo ?></p>
-            <? if (p.diasPrazo) { ?> <p style="margin:3px 0; font-size:13px;">📅 Prazo De Nigris: <?= p.diasPrazo ?> dias</p> <? } ?>
-        </div>
-        <?!= avisoHtml ?>
-        <div style="text-align:center; margin-top:30px;">
-            <a href="<?= urlApp ?>" style="background-color:<?= corPrincipal ?>; color:#ffffff; padding:12px 30px; text-decoration:none; border-radius:6px; font-weight:bold; font-size:14px; display:inline-block;">Acessar Sistema</a>
-        </div>
-    </div>
-</div>
-</body></html>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
